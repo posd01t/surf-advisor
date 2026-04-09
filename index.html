@@ -1,0 +1,1658 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ola Pierre — Surf Advisor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b1120">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏄</text></svg>">
+<script>if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
+<style>
+/* ========== RESET & BASE ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0b1120; --card: #151d2e; --card-hover: #1a2438;
+  --border: #1e2a3f; --text: #e2e8f0; --text-muted: #94a3b8;
+  --green: #34d399; --amber: #fbbf24; --red: #f87171;
+  --blue: #60a5fa; --cyan: #22d3ee; --purple: #a78bfa;
+  --radius: 14px; --radius-sm: 8px;
+}
+html { font-size: 16px; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100dvh; padding: 0 0 2rem;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--blue); text-decoration: none; }
+
+/* ========== HEADER ========== */
+.header {
+  position: sticky; top: 0; z-index: 100;
+  background: linear-gradient(180deg, var(--bg) 70%, transparent);
+  padding: 1.25rem 1rem 1rem;
+}
+.header-top {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.logo { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; }
+.logo span { color: var(--cyan); }
+.last-update { font-size: 0.7rem; color: var(--text-muted); }
+
+/* Fitness slider */
+.fitness-row {
+  display: flex; align-items: center; gap: 0.75rem;
+  background: var(--card); border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem; margin-bottom: 0.75rem;
+}
+.fitness-label { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
+.fitness-slider { flex: 1; accent-color: var(--cyan); cursor: pointer; }
+.fitness-value {
+  font-size: 1.1rem; font-weight: 700; min-width: 2.5rem; text-align: center;
+}
+
+/* Day tabs */
+.day-tabs { display: flex; gap: 0.4rem; }
+.day-tab {
+  flex: 1; padding: 0.5rem; border: none; border-radius: var(--radius-sm);
+  background: var(--card); color: var(--text-muted); cursor: pointer;
+  font-family: inherit; font-size: 0.78rem; font-weight: 600;
+  transition: all 0.2s;
+}
+.day-tab.active { background: var(--cyan); color: var(--bg); }
+.day-tab:not(.active):hover { background: var(--card-hover); color: var(--text); }
+
+/* ========== LOADING ========== */
+.loading {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 4rem 1rem; gap: 1rem;
+}
+.spinner {
+  width: 40px; height: 40px; border: 3px solid var(--border);
+  border-top-color: var(--cyan); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { color: var(--text-muted); font-size: 0.85rem; }
+
+/* ========== SPOT CARDS ========== */
+.cards { padding: 0 1rem; display: flex; flex-direction: column; gap: 1rem; }
+.card {
+  background: var(--card); border-radius: var(--radius);
+  border: 1px solid var(--border); overflow: hidden;
+  transition: border-color 0.2s;
+}
+.card:hover { border-color: #2a3a55; }
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1rem 0.5rem;
+}
+.card-rank {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-muted);
+}
+.card-rank-1 { color: var(--green); }
+.card-rank-2 { color: var(--amber); }
+.score-badge {
+  display: flex; align-items: center; gap: 0.3rem;
+  padding: 0.2rem 0.6rem; border-radius: 20px;
+  font-size: 0.85rem; font-weight: 700;
+}
+.score-green { background: rgba(52,211,153,0.15); color: var(--green); }
+.score-amber { background: rgba(251,191,36,0.15); color: var(--amber); }
+.score-red { background: rgba(248,113,113,0.15); color: var(--red); }
+
+.spot-name { font-size: 1.25rem; font-weight: 700; padding: 0 1rem 0.25rem; }
+.spot-meta {
+  display: flex; gap: 0.75rem; padding: 0 1rem 0.75rem;
+  font-size: 0.75rem; color: var(--text-muted);
+}
+.spot-meta-item { display: flex; align-items: center; gap: 0.25rem; }
+
+/* Conditions grid */
+.cond-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 0; border-top: 1px solid var(--border);
+}
+.cond-cell {
+  padding: 0.75rem; text-align: center;
+  border-right: 1px solid var(--border);
+}
+.cond-cell:last-child { border-right: none; }
+.cond-icon { font-size: 1.1rem; margin-bottom: 0.15rem; }
+.cond-value { font-size: 1rem; font-weight: 700; }
+.cond-label { font-size: 0.65rem; color: var(--text-muted); margin-top: 0.1rem; }
+
+/* Tide mini chart */
+.tide-section {
+  padding: 0.5rem 1rem 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.tide-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.3rem;
+}
+.tide-title { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+.tide-svg { width: 100%; height: 60px; }
+
+/* Board recommendation */
+.board-rec {
+  display: grid; grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--border);
+  background: rgba(34,211,238,0.04);
+}
+.board-option {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+}
+.board-option + .board-option { border-left: 1px solid var(--border); }
+.board-option:only-child { grid-column: 1 / -1; }
+.board-icon { font-size: 1.3rem; flex-shrink: 0; }
+.board-info { flex: 1; min-width: 0; }
+.board-name { font-size: 0.8rem; font-weight: 600; }
+.board-reason { font-size: 0.65rem; color: var(--text-muted); }
+
+/* Tags & warnings */
+.tags {
+  display: flex; flex-wrap: wrap; gap: 0.3rem;
+  padding: 0 1rem 0.75rem;
+}
+.tag {
+  font-size: 0.65rem; font-weight: 600; padding: 0.15rem 0.5rem;
+  border-radius: 4px; background: rgba(96,165,250,0.12); color: var(--blue);
+}
+.tag-warn { background: rgba(248,113,113,0.12); color: var(--red); }
+.tag-good { background: rgba(52,211,153,0.12); color: var(--green); }
+
+/* ========== TIMELINE ========== */
+.timeline-section {
+  margin: 1.5rem 1rem 0; background: var(--card);
+  border-radius: var(--radius); border: 1px solid var(--border);
+  padding: 1rem; overflow-x: auto;
+}
+.timeline-title {
+  font-size: 0.8rem; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.75rem;
+}
+.timeline-svg { width: 100%; min-width: 600px; height: 180px; }
+
+/* ========== EXCLUDED SPOTS ========== */
+.excluded-section {
+  margin: 1.5rem 1rem 0;
+}
+.excluded-title {
+  font-size: 0.75rem; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem;
+}
+.excluded-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.excluded-item {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: rgba(248,113,113,0.06); border: 1px solid rgba(248,113,113,0.15);
+  border-radius: var(--radius-sm); padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+}
+.excluded-icon { color: var(--red); font-size: 0.9rem; }
+.excluded-name { font-weight: 600; }
+.excluded-reason { color: var(--text-muted); }
+
+/* ========== ALL SPOTS OVERVIEW ========== */
+.all-spots-section {
+  margin: 1.5rem 1rem 0;
+}
+.all-spots-title {
+  font-size: 0.75rem; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem;
+}
+
+/* ========== FOOTER ========== */
+.footer {
+  margin: 2rem 1rem 0; padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.7rem; color: var(--text-muted);
+  text-align: center; line-height: 1.6;
+}
+
+/* ========== ARROW INDICATOR ========== */
+.arrow {
+  display: inline-block; font-size: 0.85rem;
+  transition: transform 0.2s;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (min-width: 640px) {
+  .cards { max-width: 560px; margin: 0 auto; }
+  .timeline-section, .excluded-section, .all-spots-section { max-width: 560px; margin-left: auto; margin-right: auto; }
+  .header { max-width: 560px; margin: 0 auto; }
+  .footer { max-width: 560px; margin-left: auto; margin-right: auto; }
+}
+
+/* ========== CRÉNEAU HIGHLIGHT ========== */
+.best-slot {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 1rem; border-top: 1px solid var(--border);
+  background: rgba(52,211,153,0.06);
+}
+.best-slot-icon { font-size: 1rem; }
+.best-slot-text { font-size: 0.8rem; font-weight: 600; color: var(--green); }
+.best-slot-detail { font-size: 0.7rem; color: var(--text-muted); }
+
+/* ========== TOP 3 COMPACT BAR ========== */
+.top3-bar {
+  display: flex; gap: 0.4rem; padding: 0.5rem 0; margin-top: 0.5rem;
+}
+.top3-chip {
+  flex: 1; display: flex; align-items: center; gap: 0.4rem;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 0.45rem 0.55rem;
+  cursor: pointer; transition: border-color 0.2s;
+  overflow: hidden;
+}
+.top3-chip:hover { border-color: #2a3a55; }
+.top3-gauge { flex-shrink: 0; position: relative; width: 2rem; height: 2rem; }
+.top3-gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.top3-gauge-text {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 0.6rem; font-weight: 800; letter-spacing: -0.03em;
+}
+.top3-chip-body { min-width: 0; flex: 1; }
+.top3-chip-name { font-size: 0.72rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top3-chip-detail { font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top3-chip-board { font-size: 0.6rem; font-weight: 700; flex-shrink: 0; color: var(--cyan); white-space: nowrap; }
+.top3-empty {
+  flex: 1; text-align: center; padding: 0.5rem;
+  font-size: 0.7rem; color: var(--text-muted);
+}
+
+/* ========== FEEDBACK MODAL ========== */
+.fab {
+  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 200;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--cyan); color: var(--bg);
+  border: none; font-size: 1.4rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 20px rgba(34,211,238,0.3);
+  transition: transform 0.2s;
+}
+.fab:hover { transform: scale(1.08); }
+
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  display: flex; align-items: flex-end; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s;
+}
+.modal-overlay.active { opacity: 1; pointer-events: auto; }
+
+.modal {
+  width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto;
+  background: var(--card); border-radius: var(--radius) var(--radius) 0 0;
+  padding: 1.5rem; transform: translateY(100%);
+  transition: transform 0.3s ease-out;
+}
+.modal-overlay.active .modal { transform: translateY(0); }
+
+.modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; }
+.modal-close {
+  position: absolute; top: 1rem; right: 1rem;
+  background: none; border: none; color: var(--text-muted);
+  font-size: 1.2rem; cursor: pointer;
+}
+
+.form-group { margin-bottom: 1rem; }
+.form-label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.form-select, .form-input {
+  width: 100%; padding: 0.6rem 0.75rem;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); font-family: inherit; font-size: 0.85rem;
+  appearance: none; -webkit-appearance: none;
+}
+.form-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2rem; }
+
+/* Star rating */
+.star-rating { display: flex; gap: 0.3rem; flex-direction: row-reverse; justify-content: flex-end; }
+.star-rating input { display: none; }
+.star-rating label {
+  font-size: 1.8rem; color: var(--border); cursor: pointer;
+  transition: color 0.15s;
+}
+.star-rating label:hover,
+.star-rating label:hover ~ label,
+.star-rating input:checked ~ label { color: var(--amber); }
+
+/* Context tags (checkbox pills) */
+.context-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.context-tag-input { display: none; }
+.context-tag-label {
+  font-size: 0.72rem; font-weight: 600; padding: 0.3rem 0.6rem;
+  border-radius: 20px; border: 1px solid var(--border);
+  color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+  user-select: none;
+}
+.context-tag-input:checked + .context-tag-label {
+  background: rgba(34,211,238,0.15); color: var(--cyan); border-color: var(--cyan);
+}
+
+.form-submit {
+  width: 100%; padding: 0.75rem; border: none; border-radius: var(--radius-sm);
+  background: var(--cyan); color: var(--bg); font-family: inherit;
+  font-size: 0.9rem; font-weight: 700; cursor: pointer;
+  transition: opacity 0.2s;
+}
+.form-submit:hover { opacity: 0.9; }
+.form-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Past sessions list */
+.past-sessions { margin-top: 1.25rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+.past-sessions-title { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+.past-session {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+.past-session-date { color: var(--text-muted); min-width: 4.5rem; }
+.past-session-spot { font-weight: 600; min-width: 5rem; }
+.past-session-stars { color: var(--amber); letter-spacing: -1px; }
+.past-session-tags { display: flex; gap: 0.2rem; flex-wrap: wrap; flex: 1; }
+.past-session-tag { font-size: 0.6rem; padding: 0.1rem 0.35rem; border-radius: 3px; background: rgba(96,165,250,0.1); color: var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="logo"><span>Ola</span> Pierre</div>
+      <div class="last-update" id="lastUpdate"></div>
+    </div>
+    <div style="text-align:right">
+      <div id="dateDisplay" style="font-size:0.85rem;font-weight:600;"></div>
+      <div id="weatherSummary" style="font-size:0.7rem;color:var(--text-muted);"></div>
+    </div>
+  </div>
+  <div class="fitness-row">
+    <span class="fitness-label">Forme</span>
+    <input type="range" min="1" max="5" value="3" class="fitness-slider" id="fitnessSlider">
+    <span class="fitness-value" id="fitnessValue">3 😐</span>
+  </div>
+  <div class="day-tabs" id="dayTabs"></div>
+  <div class="top3-bar" id="top3Bar"></div>
+</div>
+
+<div id="content">
+  <div class="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">Chargement des conditions...</div>
+  </div>
+</div>
+
+<div class="footer">
+  Houle & vent : <a href="https://open-meteo.com" target="_blank">Open-Meteo</a> |
+  Marées : calcul harmonique (port de Biarritz)<br>
+  Fait avec soin pour les sessions depuis Ustaritz
+</div>
+
+<!-- Feedback FAB -->
+<button class="fab" id="feedbackFab" title="Feedback session">📝</button>
+
+<!-- Feedback Modal -->
+<div class="modal-overlay" id="feedbackOverlay">
+  <div class="modal" id="feedbackModal">
+    <div class="modal-title">Feedback de session</div>
+
+    <div class="form-group">
+      <label class="form-label">Date & heure</label>
+      <input type="datetime-local" class="form-input" id="fbDate">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Spot</label>
+      <select class="form-select" id="fbSpot">
+        <option value="">Choisis un spot...</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Planche utilisée</label>
+      <select class="form-select" id="fbBoard">
+        <option value="">Choisis une planche...</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Note de la session</label>
+      <div class="star-rating" id="fbStars">
+        <input type="radio" name="rating" id="star5" value="5"><label for="star5">★</label>
+        <input type="radio" name="rating" id="star4" value="4"><label for="star4">★</label>
+        <input type="radio" name="rating" id="star3" value="3" checked><label for="star3">★</label>
+        <input type="radio" name="rating" id="star2" value="2"><label for="star2">★</label>
+        <input type="radio" name="rating" id="star1" value="1"><label for="star1">★</label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Contexte (ce qui décrit ta session)</label>
+      <div class="context-tags" id="fbTags"></div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Notes libres (optionnel)</label>
+      <input type="text" class="form-input" id="fbNotes" placeholder="Ex: super session, timing parfait...">
+    </div>
+
+    <button class="form-submit" id="fbSubmit">Enregistrer le feedback</button>
+
+    <div class="past-sessions" id="pastSessions"></div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// DATA LAYER
+// ================================================================
+
+const SPOTS = [
+  {
+    id: 'uhabia', name: 'Uhabia', lat: 43.432, lon: -1.567,
+    driveMin: 18, difficulty: 2, swellFactor: 0.85,
+    coastAngle: 310,
+    bestSwellDir: [260, 320],
+    offshoreDir: [120, 200],
+    bestTide: 'mid-rising',
+    tideExclusion: { type: 'very-low-big-coeff', reason: 'Rochers affleurants à marée très basse (gros coefficients)' },
+    swellRange: [0.4, 2.0]
+  },
+  {
+    id: 'ilbarritz', name: 'Ilbarritz', lat: 43.441, lon: -1.572,
+    driveMin: 19, difficulty: 2, swellFactor: 0.85,
+    coastAngle: 310,
+    bestSwellDir: [260, 320],
+    offshoreDir: [120, 200],
+    bestTide: 'mid',
+    tideExclusion: { type: 'very-low-big-coeff', reason: 'Rochers affleurants à marée très basse (gros coefficients)' },
+    swellRange: [0.4, 1.8]
+  },
+  {
+    id: 'bidart', name: 'Bidart Centre', lat: 43.437, lon: -1.584,
+    driveMin: 20, difficulty: 2, swellFactor: 0.85,
+    coastAngle: 310,
+    bestSwellDir: [260, 320],
+    offshoreDir: [120, 180],
+    bestTide: 'mid-to-high',
+    tideExclusion: { type: 'very-high-big-swell', reason: 'Dalles rocheuses sud, projection contre front de mer si grosse houle' },
+    swellRange: [0.4, 1.8]
+  },
+  {
+    id: 'cotebasques', name: 'Côte des Basques', lat: 43.474, lon: -1.571,
+    driveMin: 22, difficulty: 3, swellFactor: 0.80,
+    coastAngle: 340,
+    bestSwellDir: [260, 320],
+    offshoreDir: [120, 200],
+    bestTide: 'low-to-mid',
+    tideExclusion: { type: 'high-tide', reason: 'Plage disparaît, vagues sur rochers/remblais — DANGER' },
+    swellRange: [0.5, 2.0]
+  },
+  {
+    id: 'marinella', name: 'Marinella', lat: 43.498, lon: -1.535,
+    driveMin: 28, difficulty: 2, swellFactor: 0.80,
+    coastAngle: 300,
+    bestSwellDir: [260, 320],
+    offshoreDir: [100, 180],
+    bestTide: 'mid',
+    tideExclusion: { type: 'very-high', reason: 'Blocage contre rochers/digues à marée très haute' },
+    swellRange: [0.4, 1.8]
+  },
+  {
+    id: 'madrague', name: 'La Madrague', lat: 43.504, lon: -1.530,
+    driveMin: 30, difficulty: 3, swellFactor: 0.80, // OSRM: 24min + marge trafic
+    coastAngle: 300,
+    bestSwellDir: [260, 320],
+    offshoreDir: [100, 180],
+    bestTide: 'low-to-mid',
+    tideExclusion: { type: 'high-big-coeff', reason: 'Ne fonctionne plus, vagues ferment à marée haute' },
+    swellRange: [0.5, 2.0]
+  },
+  {
+    id: 'cenitz', name: 'Cenitz', lat: 43.418, lon: -1.594,
+    driveMin: 25, difficulty: 2, swellFactor: 0.65, // semi-abritée
+    coastAngle: 290,
+    bestSwellDir: [260, 310],
+    offshoreDir: [120, 180],
+    bestTide: 'high-only',
+    tideExclusion: { type: 'low-to-mid', reason: 'Rochers dangereux à marée basse/mi-basse, surtout côté nord' },
+    swellRange: [0.3, 1.2]
+  },
+  {
+    id: 'hendaye', name: 'Hendaye', lat: 43.370, lon: -1.756,
+    driveMin: 41, difficulty: 1, swellFactor: 0.55, // baie très protégée
+    coastAngle: 310,
+    bestSwellDir: [270, 320],
+    offshoreDir: [140, 210],
+    bestTide: 'all',
+    tideExclusion: null,
+    swellRange: [0.5, 2.5]
+  }
+];
+
+const BOARDS = [
+  { id: 'hybride64', name: 'Hybride 6\'4', size: '6\'4', volume: 40, waveRange: [0.6, 1.5], stability: 3, maneuver: 4.5, crowdSafe: false, icon: '🏄' },
+  { id: 'longboard9', name: 'Longboard 9\'', size: '9\'0', volume: 70, waveRange: [0.3, 2.0], stability: 4, maneuver: 4.5, crowdSafe: false, icon: '🛹' },
+  { id: 'mousse78', name: 'Mousse 500 7\'8', size: '7\'8', volume: 60, waveRange: [0.3, 1.0], stability: 5, maneuver: 1, crowdSafe: true, icon: '🧊' },
+  { id: 'mousse60', name: 'Mousse 900 6\'', size: '6\'0', volume: 46, waveRange: [0.3, 1.2], stability: 3, maneuver: 3, crowdSafe: true, icon: '🔵' },
+  { id: 'reload610', name: 'Fourth Reload 6\'10', size: '6\'10', volume: 46, waveRange: [0.5, 1.5], stability: 3, maneuver: 4, crowdSafe: false, icon: '🔥' },
+];
+
+const FITNESS_EMOJIS = { 1: '😴', 2: '😑', 3: '😐', 4: '💪', 5: '🔥' };
+
+// ================================================================
+// TIDE HARMONICS — Biarritz (port SHOM)
+// Constituants principaux : amplitude (m) et phase (deg)
+// Reference: SHOM public tidal data for Biarritz
+// ================================================================
+const TIDE_CONSTITUENTS = [
+  { name: 'M2', speed: 28.9841042, amp: 1.24, phase: 72 },
+  { name: 'S2', speed: 30.0, amp: 0.44, phase: 108 },
+  { name: 'N2', speed: 28.4397295, amp: 0.26, phase: 55 },
+  { name: 'K2', speed: 30.0821373, amp: 0.12, phase: 105 },
+  { name: 'K1', speed: 15.0410686, amp: 0.065, phase: 55 },
+  { name: 'O1', speed: 13.9430356, amp: 0.055, phase: 330 },
+  { name: 'P1', speed: 14.9589314, amp: 0.022, phase: 52 },
+  { name: 'Q1', speed: 13.3986609, amp: 0.015, phase: 310 },
+  { name: 'M4', speed: 57.9682084, amp: 0.03, phase: 200 },
+  { name: 'MS4', speed: 58.9841042, amp: 0.015, phase: 240 },
+];
+const TIDE_DATUM = 2.31; // mean sea level offset (m above chart datum)
+
+function getTideHeight(date) {
+  // Hours since epoch in UT
+  const hours = date.getTime() / 3600000;
+  let h = TIDE_DATUM;
+  for (const c of TIDE_CONSTITUENTS) {
+    const omega = c.speed * Math.PI / 180; // deg/hr to rad/hr
+    h += c.amp * Math.cos(omega * hours - c.phase * Math.PI / 180);
+  }
+  return h;
+}
+
+function getTideData(startDate, hours = 24, stepMinutes = 15) {
+  const points = [];
+  const start = new Date(startDate);
+  start.setMinutes(0, 0, 0);
+  for (let m = 0; m < hours * 60; m += stepMinutes) {
+    const t = new Date(start.getTime() + m * 60000);
+    points.push({ time: t, height: getTideHeight(t) });
+  }
+  return points;
+}
+
+function getTideExtremes(tideData) {
+  const extremes = [];
+  for (let i = 1; i < tideData.length - 1; i++) {
+    const prev = tideData[i - 1].height;
+    const curr = tideData[i].height;
+    const next = tideData[i + 1].height;
+    if (curr > prev && curr > next) {
+      extremes.push({ time: tideData[i].time, height: curr, type: 'high' });
+    } else if (curr < prev && curr < next) {
+      extremes.push({ time: tideData[i].time, height: curr, type: 'low' });
+    }
+  }
+  return extremes;
+}
+
+function getTidePhase(date, tideData) {
+  const extremes = getTideExtremes(tideData);
+  const now = date.getTime();
+  // Find surrounding extremes
+  let prevExtreme = null, nextExtreme = null;
+  for (let i = 0; i < extremes.length; i++) {
+    if (extremes[i].time.getTime() > now) {
+      nextExtreme = extremes[i];
+      prevExtreme = i > 0 ? extremes[i - 1] : null;
+      break;
+    }
+  }
+  if (!prevExtreme || !nextExtreme) return { phase: 'unknown', progress: 0.5, rising: true };
+
+  const total = nextExtreme.time.getTime() - prevExtreme.time.getTime();
+  const elapsed = now - prevExtreme.time.getTime();
+  const progress = elapsed / total;
+  const rising = nextExtreme.type === 'high';
+
+  // Classify phase
+  let phase;
+  if (progress < 0.15 || progress > 0.85) phase = prevExtreme.type === 'high' ? 'high' : 'low';
+  else if (progress < 0.5) phase = rising ? 'mid-rising' : 'mid-dropping';
+  else phase = rising ? 'mid-high-rising' : 'mid-low-dropping';
+
+  const currentHeight = getTideHeight(date);
+  const minH = Math.min(...tideData.map(p => p.height));
+  const maxH = Math.max(...tideData.map(p => p.height));
+  const normalizedHeight = (currentHeight - minH) / (maxH - minH); // 0=low, 1=high
+
+  return { phase, progress, rising, height: currentHeight, normalized: normalizedHeight };
+}
+
+// Approximate tidal coefficient (simplistic: based on M2+S2 range vs mean range)
+function getTidalCoefficient(date) {
+  const td = getTideData(date, 14, 10);
+  const extremes = getTideExtremes(td);
+  if (extremes.length < 2) return 70; // default
+  const range = Math.abs(extremes[0].height - extremes[1].height);
+  // Mean range at Biarritz ≈ 2.5m, spring ≈ 3.4m
+  // Coefficient 45 ≈ neap (1.5m range), 95 ≈ spring (3.4m range), 120 ≈ extreme
+  const coeff = Math.round(20 + (range / 3.4) * 75);
+  return Math.max(20, Math.min(120, coeff));
+}
+
+// ================================================================
+// TIDE DANGER CHECK
+// ================================================================
+function isSpotExcluded(spot, tidePhase, tidalCoeff, waveHeight) {
+  if (!spot.tideExclusion) return null;
+  const { type } = spot.tideExclusion;
+  const h = tidePhase.normalized; // 0=low, 1=high
+
+  switch (type) {
+    case 'very-low-big-coeff':
+      if (h < 0.15 && tidalCoeff > 85) return spot.tideExclusion.reason;
+      break;
+    case 'very-high-big-swell':
+      if (h > 0.9 && waveHeight > 1.2) return spot.tideExclusion.reason;
+      break;
+    case 'high-tide':
+      if (h > 0.75) return spot.tideExclusion.reason;
+      break;
+    case 'very-high':
+      if (h > 0.88) return spot.tideExclusion.reason;
+      break;
+    case 'high-big-coeff':
+      if (h > 0.8 && tidalCoeff > 75) return spot.tideExclusion.reason;
+      break;
+    case 'low-to-mid':
+      if (h < 0.55) return spot.tideExclusion.reason;
+      break;
+  }
+  return null;
+}
+
+// ================================================================
+// API LAYER
+// ================================================================
+const CACHE_KEY = 'olapierre_cache';
+const CACHE_TTL = 30 * 60 * 1000; // 30 min
+
+async function fetchWithCache(url, cacheId) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
+    if (cached[cacheId] && Date.now() - cached[cacheId].ts < CACHE_TTL) {
+      return cached[cacheId].data;
+    }
+  } catch (e) {}
+
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`API error: ${resp.status}`);
+  const data = await resp.json();
+
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
+    cached[cacheId] = { data, ts: Date.now() };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cached));
+  } catch (e) {}
+
+  return data;
+}
+
+async function fetchMarineData() {
+  // Use a central point for the Basque coast - data is regional anyway
+  const url = 'https://marine-api.open-meteo.com/v1/marine'
+    + '?latitude=43.48&longitude=-1.56'
+    + '&hourly=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,wind_wave_period'
+    + '&forecast_days=3&timezone=Europe%2FParis';
+  return fetchWithCache(url, 'marine');
+}
+
+async function fetchWeatherData() {
+  const url = 'https://api.open-meteo.com/v1/forecast'
+    + '?latitude=43.48&longitude=-1.56'
+    + '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,weather_code'
+    + '&forecast_days=3&timezone=Europe%2FParis';
+  return fetchWithCache(url, 'weather');
+}
+
+function getHourlyData(marine, weather, hourIndex) {
+  return {
+    time: marine.hourly.time[hourIndex],
+    waveHeight: marine.hourly.wave_height[hourIndex],
+    waveDir: marine.hourly.wave_direction[hourIndex],
+    wavePeriod: marine.hourly.wave_period[hourIndex],
+    swellHeight: marine.hourly.swell_wave_height[hourIndex],
+    swellDir: marine.hourly.swell_wave_direction[hourIndex],
+    swellPeriod: marine.hourly.swell_wave_period[hourIndex],
+    windWaveHeight: marine.hourly.wind_wave_height[hourIndex],
+    windWavePeriod: marine.hourly.wind_wave_period[hourIndex],
+    windSpeed: weather.hourly.wind_speed_10m[hourIndex],
+    windDir: weather.hourly.wind_direction_10m[hourIndex],
+    windGusts: weather.hourly.wind_gusts_10m[hourIndex],
+    temp: weather.hourly.temperature_2m[hourIndex],
+    weatherCode: weather.hourly.weather_code[hourIndex],
+  };
+}
+
+// Get average conditions for a time window (e.g., 6h-12h for morning session)
+function getWindowAverage(marine, weather, startHourIdx, count) {
+  const fields = ['waveHeight', 'wavePeriod', 'swellHeight', 'swellPeriod', 'windWaveHeight',
+    'windSpeed', 'windGusts', 'temp'];
+  const dirFields = ['waveDir', 'swellDir', 'windDir'];
+
+  const sum = {};
+  const sinSum = {};
+  const cosSum = {};
+  fields.forEach(f => sum[f] = 0);
+  dirFields.forEach(f => { sinSum[f] = 0; cosSum[f] = 0; });
+
+  let n = 0;
+  for (let i = startHourIdx; i < startHourIdx + count && i < marine.hourly.time.length; i++) {
+    const d = getHourlyData(marine, weather, i);
+    fields.forEach(f => sum[f] += (d[f] || 0));
+    dirFields.forEach(f => {
+      const rad = (d[f] || 0) * Math.PI / 180;
+      sinSum[f] += Math.sin(rad);
+      cosSum[f] += Math.cos(rad);
+    });
+    n++;
+  }
+
+  const avg = { weatherCode: getHourlyData(marine, weather, startHourIdx + Math.floor(count / 2)).weatherCode };
+  fields.forEach(f => avg[f] = sum[f] / n);
+  dirFields.forEach(f => avg[f] = ((Math.atan2(sinSum[f] / n, cosSum[f] / n) * 180 / Math.PI) + 360) % 360);
+
+  return avg;
+}
+
+// ================================================================
+// SCORING ENGINE
+// ================================================================
+
+function angleDiff(a, b) {
+  let d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+function isInRange(angle, range) {
+  // range = [min, max] in degrees, handles wrap-around
+  let [min, max] = range;
+  if (min <= max) return angle >= min && angle <= max;
+  return angle >= min || angle <= max;
+}
+
+function scoreWaveSize(height) {
+  // Sweet spot 0.5-1.5m for intermediate, ideal 0.8-1.2m
+  if (height < 0.3) return 0;
+  if (height < 0.5) return 10;
+  if (height < 0.8) return 20;
+  if (height <= 1.2) return 30; // ideal
+  if (height <= 1.5) return 25;
+  if (height <= 1.8) return 15;
+  if (height <= 2.2) return 5;
+  return 0;
+}
+
+function scorePeriod(period) {
+  if (period >= 12) return 15;
+  if (period >= 10) return 10;
+  if (period >= 8) return 5;
+  return 0;
+}
+
+function scoreWind(speed, gustSpeed, windDir, offshoreRange) {
+  const isOffshore = isInRange(windDir, offshoreRange);
+  const isCrossOff = angleDiff(windDir, (offshoreRange[0] + offshoreRange[1]) / 2) < 60;
+
+  // Exclusion
+  if (gustSpeed > 40) return -1; // excluded
+
+  let score;
+  if (speed < 10) {
+    score = 18; // glassy
+  } else if (speed < 20) {
+    score = isOffshore ? 20 : isCrossOff ? 14 : 8;
+  } else if (speed < 30) {
+    score = isOffshore ? 10 : isCrossOff ? 5 : 2;
+  } else {
+    score = 0; // warning
+  }
+  return score;
+}
+
+function scoreTideAlignment(spot, tidePhase) {
+  const h = tidePhase.normalized; // 0=low, 1=high
+  const rising = tidePhase.rising;
+  const bt = spot.bestTide;
+
+  switch (bt) {
+    case 'mid-rising':
+      if (h > 0.3 && h < 0.7 && rising) return 15;
+      if (h > 0.2 && h < 0.8) return 8;
+      return 3;
+    case 'mid':
+      if (h > 0.3 && h < 0.7) return 15;
+      if (h > 0.2 && h < 0.8) return 8;
+      return 3;
+    case 'mid-to-high':
+      if (h > 0.4 && h < 0.85) return 15;
+      if (h > 0.3) return 8;
+      return 3;
+    case 'low-to-mid':
+      if (h < 0.55) return 15;
+      if (h < 0.7) return 8;
+      return 3;
+    case 'high-only':
+      if (h > 0.7) return 15;
+      if (h > 0.55) return 8;
+      return 2;
+    case 'all':
+      if (h > 0.4 && h < 0.75) return 15; // mid-high ideal for Hendaye
+      return 10;
+    default:
+      return 8;
+  }
+}
+
+function scoreSwellDirection(swellDir, bestRange) {
+  if (isInRange(swellDir, bestRange)) return 10;
+  const mid = (bestRange[0] + bestRange[1]) / 2;
+  const diff = angleDiff(swellDir, mid);
+  if (diff < 30) return 7;
+  if (diff < 50) return 4;
+  return 1;
+}
+
+function scoreDistance(driveMin) {
+  // 10 pts max, continuous scale from GPS-calculated drive times
+  // Uhabia=18min → 10pts, Hendaye=41min → 2pts
+  return Math.max(1, Math.round(10 - (driveMin - 18) * (8 / 23)));
+}
+
+function computeSpotScore(spot, conditions, tidePhase, tidalCoeff, fitness) {
+  const rawSwell = conditions.swellHeight || conditions.waveHeight;
+  const waveH = rawSwell * (spot.swellFactor || 0.85); // Local wave height adjusted for spot exposure
+
+  // Check exclusion (use local wave height)
+  const exclusionReason = isSpotExcluded(spot, tidePhase, tidalCoeff, waveH);
+  if (exclusionReason) return { score: -1, excluded: true, reason: exclusionReason };
+
+  // Wind exclusion
+  const windScore = scoreWind(conditions.windSpeed, conditions.windGusts, conditions.windDir, spot.offshoreDir);
+  if (windScore === -1) return { score: -1, excluded: true, reason: 'Rafales > 40 km/h — dangereux' };
+
+  // Fitness adjustments
+  let maxWave = 1.8;
+  let excludeDifficulty = 99;
+  if (fitness <= 2) {
+    maxWave = 1.0;
+    excludeDifficulty = 3;
+  } else if (fitness >= 4) {
+    maxWave = 2.2;
+  }
+
+  if (waveH > maxWave) return { score: -1, excluded: true, reason: `Vagues ~${waveH.toFixed(1)}m trop grosses pour ta forme (${fitness}/5)` };
+  if (spot.difficulty >= excludeDifficulty) return { score: -1, excluded: true, reason: `Spot trop engagé pour ta forme (${fitness}/5)` };
+
+  const waveSc = scoreWaveSize(waveH);
+  const periodSc = scorePeriod(conditions.swellPeriod || conditions.wavePeriod);
+  const tideSc = scoreTideAlignment(spot, tidePhase);
+  const dirSc = scoreSwellDirection(conditions.swellDir || conditions.waveDir, spot.bestSwellDir);
+  const distSc = scoreDistance(spot.driveMin);
+
+  // Fitness bonus/malus on wave score
+  let fitnessAdj = 0;
+  if (fitness >= 4 && waveH > 1.2) fitnessAdj = 3;
+  if (fitness <= 2) fitnessAdj = distSc > 6 ? 2 : -2; // favor close spots
+
+  const total = waveSc + periodSc + windScore + tideSc + dirSc + distSc + fitnessAdj;
+  const score = Math.max(0, Math.min(100, total));
+
+  const tags = [];
+  const warnings = [];
+  const localWaveHeight = waveH;
+
+  if (conditions.windSpeed < 10) tags.push({ text: 'Glassy', type: 'good' });
+  else if (windScore >= 14) tags.push({ text: 'Offshore', type: 'good' });
+
+  if (conditions.swellPeriod >= 12) tags.push({ text: `${conditions.swellPeriod.toFixed(0)}s`, type: 'good' });
+  if (tideSc >= 12) tags.push({ text: 'Bonne marée', type: 'good' });
+
+  if (conditions.windSpeed >= 30) warnings.push('Vent fort');
+  if (waveH > 1.5 && fitness < 4) warnings.push('Grosse houle, sois prudent');
+  if (waveH > 1.2 && fitness <= 2) warnings.push('Forme nécessaire ≥ 3');
+  if (waveH < 0.4) warnings.push('Très petit, peu de vagues');
+
+  return { score, excluded: false, waveSc, periodSc, windScore, tideSc, dirSc, distSc, tags, warnings, localWaveHeight };
+}
+
+// ================================================================
+// BOARD RECOMMENDATION
+// ================================================================
+function recommendBoard(waveHeight, wavePeriod, windSpeed, fitness, isCrowded) {
+  const boards = [];
+
+  if (isCrowded) {
+    // Favor foam boards
+    if (waveHeight <= 1.0) boards.push({ board: BOARDS[2], reason: 'Mousse safe pour le crowd' }); // 7'8
+    boards.push({ board: BOARDS[3], reason: 'Mousse maniable + safe crowd' }); // 6'0
+    if (waveHeight >= 0.6) boards.push({ board: BOARDS[4], reason: 'Polyvalente, ta favorite' }); // 6'10
+  } else {
+    if (waveHeight < 0.5) {
+      boards.push({ board: BOARDS[1], reason: 'Maximum de rame pour micro-vagues' }); // Longboard
+      boards.push({ board: BOARDS[2], reason: 'Volume max pour tout attraper' }); // Mousse 7'8
+    } else if (waveHeight < 0.8) {
+      boards.push({ board: BOARDS[1], reason: 'Glide parfait pour petites vagues' }); // Longboard
+      boards.push({ board: BOARDS[4], reason: 'Polyvalente, ta favorite' }); // Reload
+      boards.push({ board: BOARDS[3], reason: 'Fun et facile en petit' }); // Mousse 6'
+    } else if (waveHeight < 1.2) {
+      boards.push({ board: BOARDS[4], reason: 'Ta go-to pour ces conditions' }); // Reload
+      boards.push({ board: BOARDS[0], reason: 'Plus de maniabilité, essaie-la !' }); // Hybride 6'4
+      if (wavePeriod >= 10) boards.push({ board: BOARDS[1], reason: 'Longues vagues = longboard' }); // Longboard
+    } else if (waveHeight < 1.5) {
+      boards.push({ board: BOARDS[0], reason: 'Taillée pour ce format' }); // Hybride
+      boards.push({ board: BOARDS[4], reason: 'Polyvalente fiable' }); // Reload
+      boards.push({ board: BOARDS[1], reason: 'Stabilité sur les plus grosses séries' }); // Longboard
+    } else {
+      boards.push({ board: BOARDS[1], reason: 'Stabilité max quand ça pousse' }); // Longboard
+      if (fitness >= 3) boards.push({ board: BOARDS[0], reason: 'Maniable dans le gros si en forme' }); // Hybride
+    }
+  }
+
+  return boards.slice(0, 2);
+}
+
+function isCrowdedTime(date) {
+  const month = date.getMonth(); // 0-indexed
+  const day = date.getDay(); // 0=Sun
+  const hour = date.getHours();
+  const isSummer = month >= 5 && month <= 8; // June-Sept
+  const isWeekend = day === 0 || day === 6;
+  const isPeakHour = hour >= 10 && hour <= 16;
+  return (isSummer && isPeakHour) || (isWeekend && isPeakHour && month >= 4);
+}
+
+// ================================================================
+// RENDERING
+// ================================================================
+
+function dirArrow(degrees) {
+  // Return rotated arrow - arrow shows where wind/swell COMES FROM
+  return `<span class="arrow" style="transform:rotate(${degrees + 180}deg)">↑</span>`;
+}
+
+function dirLabel(degrees) {
+  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  return dirs[Math.round(degrees / 22.5) % 16];
+}
+
+function scoreColor(score) {
+  if (score >= 65) return 'green';
+  if (score >= 40) return 'amber';
+  return 'red';
+}
+
+function renderTideSVG(tideData, now, bestTidePhases, width = 280, height = 55) {
+  const times = tideData.map(p => p.time.getTime());
+  const heights = tideData.map(p => p.height);
+  const minT = times[0], maxT = times[times.length - 1];
+  const minH = Math.min(...heights), maxH = Math.max(...heights);
+  const rangeH = maxH - minH || 1;
+  const pad = 4;
+
+  const x = t => pad + ((t - minT) / (maxT - minT)) * (width - 2 * pad);
+  const y = h => height - pad - ((h - minH) / rangeH) * (height - 2 * pad);
+
+  // Build path
+  const pts = tideData.map(p => `${x(p.time.getTime()).toFixed(1)},${y(p.height).toFixed(1)}`);
+  const pathD = 'M' + pts.join('L');
+
+  // Fill area
+  const fillD = pathD + `L${x(maxT).toFixed(1)},${height}L${x(minT).toFixed(1)},${height}Z`;
+
+  // Now marker
+  const nowX = x(now.getTime());
+  const nowH = getTideHeight(now);
+  const nowY = y(nowH);
+
+  // Hour labels
+  let hourLabels = '';
+  const startHour = new Date(minT);
+  startHour.setMinutes(0, 0, 0);
+  for (let h = new Date(startHour); h.getTime() <= maxT; h.setHours(h.getHours() + 3)) {
+    if (h.getTime() >= minT) {
+      const hx = x(h.getTime());
+      hourLabels += `<text x="${hx}" y="${height - 0.5}" fill="#475569" font-size="7" text-anchor="middle">${h.getHours()}h</text>`;
+      hourLabels += `<line x1="${hx}" y1="${pad}" x2="${hx}" y2="${height - 6}" stroke="#1e2a3f" stroke-width="0.5"/>`;
+    }
+  }
+
+  // Extremes labels
+  const extremes = getTideExtremes(tideData);
+  let extremeLabels = '';
+  for (const ext of extremes) {
+    const ex = x(ext.time.getTime());
+    const ey = y(ext.height);
+    const ly = ext.type === 'high' ? ey - 5 : ey + 9;
+    extremeLabels += `<text x="${ex}" y="${ly}" fill="${ext.type === 'high' ? '#60a5fa' : '#94a3b8'}" font-size="6.5" font-weight="600" text-anchor="middle">${ext.height.toFixed(1)}m</text>`;
+  }
+
+  return `<svg class="tide-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
+    ${hourLabels}
+    <path d="${fillD}" fill="rgba(96,165,250,0.08)"/>
+    <path d="${pathD}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-linejoin="round"/>
+    ${extremeLabels}
+    <circle cx="${nowX.toFixed(1)}" cy="${nowY.toFixed(1)}" r="3" fill="#22d3ee"/>
+    <line x1="${nowX.toFixed(1)}" y1="${pad}" x2="${nowX.toFixed(1)}" y2="${height - 6}" stroke="#22d3ee" stroke-width="0.5" stroke-dasharray="2,2"/>
+  </svg>`;
+}
+
+function weatherIcon(code) {
+  if (code <= 1) return '☀️';
+  if (code <= 3) return '⛅';
+  if (code <= 48) return '🌫️';
+  if (code <= 57) return '🌦️';
+  if (code <= 67) return '🌧️';
+  if (code <= 77) return '🌨️';
+  if (code <= 82) return '🌧️';
+  if (code <= 86) return '🌨️';
+  return '⛈️';
+}
+
+function renderSpotCard(spot, result, conditions, tideData, now, rank, fitness) {
+  const waveH = result.localWaveHeight || (conditions.swellHeight || conditions.waveHeight) * (spot.swellFactor || 0.85);
+  const crowded = isCrowdedTime(now);
+  const boards = recommendBoard(waveH, conditions.swellPeriod || conditions.wavePeriod, conditions.windSpeed, fitness, crowded);
+  const sc = scoreColor(result.score);
+
+  // Find best time slot for this spot today
+  const bestSlot = findBestSlot(spot, now, fitness);
+
+  return `
+    <div class="card">
+      <div class="card-header">
+        <span class="card-rank ${rank === 0 ? 'card-rank-1' : rank === 1 ? 'card-rank-2' : ''}">
+          ${rank === 0 ? '★ Meilleur choix' : rank === 1 ? '★ Option 2' : '★ Option 3'}
+        </span>
+        <span class="score-badge score-${sc}">${result.score}/100</span>
+      </div>
+      <div class="spot-name">${spot.name}</div>
+      <div class="spot-meta">
+        <span class="spot-meta-item">🚗 ${spot.driveMin} min</span>
+        <span class="spot-meta-item">${weatherIcon(conditions.weatherCode)} ${conditions.temp.toFixed(0)}°C</span>
+        ${crowded ? '<span class="spot-meta-item">👥 Affluence</span>' : ''}
+      </div>
+      <div class="cond-grid">
+        <div class="cond-cell">
+          <div class="cond-icon">${dirArrow(conditions.swellDir || conditions.waveDir)}</div>
+          <div class="cond-value">${waveH.toFixed(1)}m</div>
+          <div class="cond-label">${(conditions.swellPeriod || conditions.wavePeriod).toFixed(0)}s ${dirLabel(conditions.swellDir || conditions.waveDir)}</div>
+        </div>
+        <div class="cond-cell">
+          <div class="cond-icon">${dirArrow(conditions.windDir)}</div>
+          <div class="cond-value">${conditions.windSpeed.toFixed(0)}</div>
+          <div class="cond-label">km/h ${dirLabel(conditions.windDir)}</div>
+        </div>
+        <div class="cond-cell">
+          <div class="cond-icon">🌊</div>
+          <div class="cond-value">${getTideHeight(now).toFixed(1)}m</div>
+          <div class="cond-label">${getTidePhase(now, tideData).rising ? '↗ Monte' : '↘ Descend'}</div>
+        </div>
+      </div>
+      <div class="tide-section">
+        <div class="tide-header">
+          <span class="tide-title">Marée aujourd'hui</span>
+          <span class="tide-title">Coeff ~${getTidalCoefficient(now)}</span>
+        </div>
+        ${renderTideSVG(tideData, now)}
+      </div>
+      ${bestSlot ? `
+      <div class="best-slot">
+        <span class="best-slot-icon">⏰</span>
+        <div>
+          <div class="best-slot-text">Meilleur créneau : ${bestSlot.label}</div>
+          <div class="best-slot-detail">${bestSlot.detail}</div>
+        </div>
+      </div>` : ''}
+      <div class="tags">
+        ${result.tags.map(t => `<span class="tag ${t.type === 'good' ? 'tag-good' : ''}">${t.text}</span>`).join('')}
+        ${result.warnings.map(w => `<span class="tag tag-warn">⚠ ${w}</span>`).join('')}
+      </div>
+      <div class="board-rec">
+        <div class="board-option">
+          <span class="board-icon">${boards[0]?.board.icon || '🏄'}</span>
+          <div class="board-info">
+            <div class="board-name">${boards[0]?.board.name || '—'}</div>
+            <div class="board-reason">${boards[0]?.reason || ''}</div>
+          </div>
+        </div>
+        ${boards[1] ? `
+        <div class="board-option">
+          <span class="board-icon">${boards[1].board.icon}</span>
+          <div class="board-info">
+            <div class="board-name">${boards[1].board.name}</div>
+            <div class="board-reason">${boards[1].reason}</div>
+          </div>
+        </div>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderExcludedSpots(excluded) {
+  if (excluded.length === 0) return '';
+  return `
+    <div class="excluded-section">
+      <div class="excluded-title">Spots exclus actuellement</div>
+      <div class="excluded-list">
+        ${excluded.map(e => `
+          <div class="excluded-item">
+            <span class="excluded-icon">✗</span>
+            <span class="excluded-name">${e.spot.name}</span>
+            <span class="excluded-reason">— ${e.reason}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+// ================================================================
+// TIMELINE RENDERING
+// ================================================================
+function renderTimeline(marine, weather, dayStartIdx, tideData, spotName) {
+  const width = 650, height = 170;
+  const padL = 35, padR = 10, padT = 20, padB = 25;
+  const chartW = width - padL - padR;
+  const chartH = height - padT - padB;
+
+  // Get 24 hours of data
+  const hours = [];
+  for (let i = 0; i < 24 && (dayStartIdx + i) < marine.hourly.time.length; i++) {
+    hours.push(getHourlyData(marine, weather, dayStartIdx + i));
+  }
+  if (hours.length === 0) return '';
+
+  const maxWave = Math.max(2, ...hours.map(h => h.waveHeight || 0));
+  const x = i => padL + (i / 23) * chartW;
+  const yWave = v => padT + chartH - (v / maxWave) * chartH * 0.6;
+
+  // Wave bars
+  let bars = '';
+  for (let i = 0; i < hours.length; i++) {
+    const h = hours[i];
+    const bx = x(i) - 6;
+    const swellH = h.swellHeight || 0;
+    const windWH = h.windWaveHeight || 0;
+    const totalH = h.waveHeight || 0;
+
+    const swellBarH = (swellH / maxWave) * chartH * 0.6;
+    const windBarH = (windWH / maxWave) * chartH * 0.6;
+
+    bars += `<rect x="${bx}" y="${yWave(swellH)}" width="12" height="${swellBarH}" fill="rgba(96,165,250,0.6)" rx="2"/>`;
+    bars += `<rect x="${bx}" y="${yWave(swellH + windWH)}" width="12" height="${windBarH}" fill="rgba(251,191,36,0.3)" rx="2"/>`;
+  }
+
+  // Tide curve overlay (on right y-axis)
+  const tidePoints = tideData.filter(p => {
+    const h = p.time.getHours() + p.time.getMinutes() / 60;
+    return true;
+  });
+  const minTH = Math.min(...tidePoints.map(p => p.height));
+  const maxTH = Math.max(...tidePoints.map(p => p.height));
+  const rangeTH = maxTH - minTH || 1;
+
+  const startTime = tidePoints[0]?.time.getTime() || 0;
+  const endTime = tidePoints[tidePoints.length - 1]?.time.getTime() || 1;
+  const timeRange = endTime - startTime || 1;
+
+  const tidePath = tidePoints.map((p, i) => {
+    const tx = padL + ((p.time.getTime() - startTime) / timeRange) * chartW;
+    const ty = padT + chartH - ((p.height - minTH) / rangeTH) * chartH * 0.35 - chartH * 0.05;
+    return `${i === 0 ? 'M' : 'L'}${tx.toFixed(1)},${ty.toFixed(1)}`;
+  }).join('');
+
+  // Wind arrows
+  let windArrows = '';
+  for (let i = 0; i < hours.length; i += 2) {
+    const h = hours[i];
+    const wx = x(i);
+    const wy = padT - 5;
+    const speed = h.windSpeed;
+    const color = speed < 10 ? '#34d399' : speed < 20 ? '#fbbf24' : speed < 30 ? '#f87171' : '#ef4444';
+    windArrows += `<g transform="translate(${wx},${wy}) rotate(${h.windDir + 180})">
+      <line x1="0" y1="-5" x2="0" y2="5" stroke="${color}" stroke-width="1.5"/>
+      <polygon points="-2.5,2 2.5,2 0,6" fill="${color}"/>
+    </g>`;
+  }
+
+  // Hour labels
+  let xLabels = '';
+  for (let i = 0; i < 24; i += 3) {
+    xLabels += `<text x="${x(i)}" y="${height - 5}" fill="#475569" font-size="9" text-anchor="middle">${i}h</text>`;
+    xLabels += `<line x1="${x(i)}" y1="${padT}" x2="${x(i)}" y2="${height - padB}" stroke="#1e2a3f" stroke-width="0.5"/>`;
+  }
+
+  // Y-axis labels
+  let yLabels = '';
+  for (let v = 0; v <= maxWave; v += 0.5) {
+    const yy = yWave(v);
+    if (yy >= padT && yy <= padT + chartH) {
+      yLabels += `<text x="${padL - 4}" y="${yy + 3}" fill="#475569" font-size="8" text-anchor="end">${v.toFixed(1)}</text>`;
+    }
+  }
+
+  return `
+    <div class="timeline-section">
+      <div class="timeline-title">Timeline détaillée — ${spotName || 'Conditions'}</div>
+      <svg class="timeline-svg" viewBox="0 0 ${width} ${height}">
+        ${xLabels}${yLabels}
+        ${bars}
+        <path d="${tidePath}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+        ${windArrows}
+        <text x="${padL}" y="${padT - 10}" fill="#475569" font-size="7">VENT</text>
+        <text x="${width - padR}" y="${padT + chartH + 2}" fill="#60a5fa" font-size="7" text-anchor="end">— Marée</text>
+        <rect x="${padL + 50}" y="${padT - 16}" width="8" height="6" fill="rgba(96,165,250,0.6)" rx="1"/>
+        <text x="${padL + 62}" y="${padT - 11}" fill="#475569" font-size="7">Swell</text>
+        <rect x="${padL + 95}" y="${padT - 16}" width="8" height="6" fill="rgba(251,191,36,0.3)" rx="1"/>
+        <text x="${padL + 107}" y="${padT - 11}" fill="#475569" font-size="7">Wind wave</text>
+      </svg>
+    </div>`;
+}
+
+// ================================================================
+// BEST TIME SLOT FINDER
+// ================================================================
+let _globalMarine = null, _globalWeather = null;
+
+function findBestSlot(spot, baseDate, fitness) {
+  if (!_globalMarine || !_globalWeather) return null;
+
+  const marine = _globalMarine;
+  const weather = _globalWeather;
+  const times = marine.hourly.time;
+
+  // Find start of day
+  const dayStr = baseDate.toISOString().slice(0, 10);
+  let dayStartIdx = times.findIndex(t => t.startsWith(dayStr));
+  if (dayStartIdx === -1) return null;
+
+  // Score each 2-hour window from 6h to 20h
+  let bestScore = -1, bestStart = -1, bestEnd = -1, bestDetail = '';
+
+  for (let h = 6; h <= 18; h += 1) {
+    const idx = dayStartIdx + h;
+    if (idx + 2 > times.length) break;
+
+    const cond = getWindowAverage(marine, weather, idx, 2);
+    const slotDate = new Date(times[idx]);
+    const td = getTideData(slotDate, 4, 10);
+    const tp = getTidePhase(slotDate, td);
+    const coeff = getTidalCoefficient(slotDate);
+
+    const result = computeSpotScore(spot, cond, tp, coeff, fitness);
+    if (!result.excluded && result.score > bestScore) {
+      bestScore = result.score;
+      bestStart = h;
+      bestEnd = h + 2;
+      const waveH = cond.swellHeight || cond.waveHeight;
+      bestDetail = `${waveH.toFixed(1)}m @ ${(cond.swellPeriod || cond.wavePeriod).toFixed(0)}s, vent ${cond.windSpeed.toFixed(0)}km/h`;
+    }
+  }
+
+  if (bestScore < 0) return null;
+  return {
+    label: `${bestStart}h — ${bestEnd}h`,
+    detail: bestDetail,
+    score: bestScore
+  };
+}
+
+// ================================================================
+// MAIN APP
+// ================================================================
+let currentDayOffset = 0;
+let currentFitness = 3;
+
+function getDayDate(offset) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  d.setHours(offset === 0 ? d.getHours() : 9, 0, 0, 0); // Use current hour for today, 9h for future
+  return d;
+}
+
+function setupDayTabs() {
+  const container = document.getElementById('dayTabs');
+  const days = [];
+  const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+
+  for (let i = 0; i < 3; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    const label = i === 0 ? "Aujourd'hui" : i === 1 ? 'Demain' : dayNames[d.getDay()] + ' ' + d.getDate();
+    days.push(label);
+  }
+
+  container.innerHTML = days.map((label, i) =>
+    `<button class="day-tab ${i === 0 ? 'active' : ''}" data-day="${i}">${label}</button>`
+  ).join('');
+
+  container.addEventListener('click', e => {
+    const btn = e.target.closest('.day-tab');
+    if (!btn) return;
+    currentDayOffset = parseInt(btn.dataset.day);
+    container.querySelectorAll('.day-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderAll();
+  });
+}
+
+function setupFitnessSlider() {
+  const slider = document.getElementById('fitnessSlider');
+  const display = document.getElementById('fitnessValue');
+
+  slider.addEventListener('input', () => {
+    currentFitness = parseInt(slider.value);
+    display.textContent = `${currentFitness} ${FITNESS_EMOJIS[currentFitness]}`;
+    renderAll();
+  });
+}
+
+async function loadData() {
+  try {
+    const [marine, weather] = await Promise.all([fetchMarineData(), fetchWeatherData()]);
+    _globalMarine = marine;
+    _globalWeather = weather;
+    document.getElementById('lastUpdate').textContent = `Mis à jour : ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    renderAll();
+  } catch (err) {
+    document.getElementById('content').innerHTML = `
+      <div class="loading">
+        <div style="font-size:2rem">⚠️</div>
+        <div class="loading-text">Erreur de chargement : ${err.message}</div>
+        <button onclick="loadData()" style="margin-top:1rem;padding:0.5rem 1.5rem;border:none;border-radius:8px;background:var(--cyan);color:var(--bg);font-weight:600;cursor:pointer;">Réessayer</button>
+      </div>`;
+  }
+}
+
+function renderAll() {
+  if (!_globalMarine || !_globalWeather) return;
+
+  const marine = _globalMarine;
+  const weather = _globalWeather;
+  const now = getDayDate(currentDayOffset);
+  const fitness = currentFitness;
+
+  // Date display
+  const dateOpts = { weekday: 'long', day: 'numeric', month: 'long' };
+  document.getElementById('dateDisplay').textContent = now.toLocaleDateString('fr-FR', dateOpts);
+
+  // Find hour index for the selected day
+  const dayStr = now.toISOString().slice(0, 10);
+  const times = marine.hourly.time;
+  let dayStartIdx = times.findIndex(t => t.startsWith(dayStr));
+  if (dayStartIdx === -1) dayStartIdx = 0;
+
+  // Determine "current" hour index
+  const currentHour = now.getHours();
+  const hourIdx = dayStartIdx + Math.max(6, Math.min(currentHour, 20)); // Clamp to 6-20h
+
+  // Get conditions (average over 3h window centered on current)
+  const windowStart = Math.max(dayStartIdx, hourIdx - 1);
+  const conditions = getWindowAverage(marine, weather, windowStart, 3);
+
+  // Weather summary
+  const tempAvg = conditions.temp;
+  document.getElementById('weatherSummary').textContent =
+    `${weatherIcon(conditions.weatherCode)} ${tempAvg.toFixed(0)}°C • Vent ${conditions.windSpeed.toFixed(0)} km/h`;
+
+  // Compute tide data for the day
+  const dayDate = new Date(now);
+  dayDate.setHours(0, 0, 0, 0);
+  const tideData = getTideData(dayDate, 24, 10);
+  const tidePhase = getTidePhase(now, tideData);
+  const tidalCoeff = getTidalCoefficient(now);
+
+  // Score all spots
+  const results = SPOTS.map(spot => {
+    const result = computeSpotScore(spot, conditions, tidePhase, tidalCoeff, fitness);
+    return { spot, result };
+  });
+
+  // Separate active vs excluded
+  const active = results.filter(r => !r.result.excluded).sort((a, b) => b.result.score - a.result.score);
+  const excluded = results.filter(r => r.result.excluded).map(r => ({ spot: r.spot, reason: r.result.reason }));
+
+  // Render top-3 compact bar
+  renderTop3Bar(active, now, fitness);
+
+  // Render
+  const top3 = active.slice(0, 3);
+  const topSpotName = top3[0]?.spot.name || '';
+
+  let html = '<div class="cards">';
+  if (top3.length === 0) {
+    html += `<div class="card" style="padding:2rem;text-align:center;">
+      <div style="font-size:2rem;margin-bottom:0.5rem;">😬</div>
+      <div style="font-weight:600;">Pas de spot recommandé actuellement</div>
+      <div style="color:var(--text-muted);font-size:0.85rem;margin-top:0.5rem;">
+        Conditions pas idéales ou marées dangereuses partout. Check demain !
+      </div>
+    </div>`;
+  } else {
+    top3.forEach((r, i) => {
+      html += renderSpotCard(r.spot, r.result, conditions, tideData, now, i, fitness);
+    });
+  }
+  html += '</div>';
+
+  // Timeline for top spot
+  html += renderTimeline(marine, weather, dayStartIdx, tideData, topSpotName);
+
+  // Excluded spots
+  html += renderExcludedSpots(excluded);
+
+  document.getElementById('content').innerHTML = html;
+}
+
+// ================================================================
+// TOP-3 COMPACT BAR
+// ================================================================
+function renderTop3Bar(active, now, fitness) {
+  const bar = document.getElementById('top3Bar');
+  if (!bar) return;
+  const top3 = active.slice(0, 3);
+
+  if (top3.length === 0) {
+    bar.innerHTML = '<div class="top3-empty">Aucun spot recommandé — check un autre jour</div>';
+    return;
+  }
+
+  bar.innerHTML = top3.map((r, i) => {
+    const spot = r.spot;
+    const score = r.result.score;
+    const waveH = r.result.localWaveHeight || 0;
+    const crowded = isCrowdedTime(now);
+    const boards = recommendBoard(waveH, 10, 10, fitness, crowded);
+    const bestSlot = findBestSlot(spot, now, fitness);
+    const timeLabel = bestSlot ? bestSlot.label.replace(' — ', '-') : '';
+    const boardSize = boards[0]?.board.size || '?';
+
+    // Circular gauge SVG
+    const pct = Math.max(0, Math.min(100, score)) / 100;
+    const r0 = 14, cx = 16, cy = 16, sw = 3;
+    const circ = 2 * Math.PI * r0;
+    const dash = pct * circ;
+    // Color gradient: red(0) → amber(50) → green(100)
+    const gaugeColor = score >= 65 ? '#34d399' : score >= 40 ? '#fbbf24' : '#f87171';
+    const textColor = gaugeColor;
+    const gauge = `<div class="top3-gauge">
+      <svg viewBox="0 0 32 32">
+        <circle cx="${cx}" cy="${cy}" r="${r0}" fill="none" stroke="#1e2a3f" stroke-width="${sw}"/>
+        <circle cx="${cx}" cy="${cy}" r="${r0}" fill="none" stroke="${gaugeColor}" stroke-width="${sw}"
+          stroke-dasharray="${dash.toFixed(1)} ${circ.toFixed(1)}" stroke-linecap="round"/>
+      </svg>
+      <div class="top3-gauge-text" style="color:${textColor}">${score}</div>
+    </div>`;
+
+    return `<div class="top3-chip" onclick="document.querySelectorAll('.card')[${i}]?.scrollIntoView({behavior:'smooth',block:'center'})">
+      ${gauge}
+      <div class="top3-chip-body">
+        <div class="top3-chip-name">${spot.name}</div>
+        <div class="top3-chip-detail">${timeLabel} · ${waveH.toFixed(1)}m</div>
+      </div>
+      <span class="top3-chip-board">${boardSize}</span>
+    </div>`;
+  }).join('');
+}
+
+// ================================================================
+// FEEDBACK SYSTEM
+// ================================================================
+const FEEDBACK_KEY = 'olapierre_feedback';
+const CONTEXT_TAGS = [
+  'Vagues parfaites', 'Trop gros', 'Trop petit', 'Vent onshore',
+  'Glassy', 'Crowdé', 'Personne à l\'eau', 'Courant fort',
+  'Vagues fermées', 'Eau froide', 'Eau chaude',
+  'Fatigue', 'En pleine forme', 'Difficulté à passer la barre',
+  'Bonnes séries régulières', 'Longue attente entre séries',
+  'Bonne recommandation app', 'Mauvaise recommandation app'
+];
+
+function getFeedback() {
+  try { return JSON.parse(localStorage.getItem(FEEDBACK_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveFeedback(entry) {
+  const all = getFeedback();
+  all.unshift(entry);
+  localStorage.setItem(FEEDBACK_KEY, JSON.stringify(all.slice(0, 100))); // keep last 100
+}
+
+function setupFeedbackModal() {
+  const fab = document.getElementById('feedbackFab');
+  const overlay = document.getElementById('feedbackOverlay');
+  const modal = document.getElementById('feedbackModal');
+  const dateInput = document.getElementById('fbDate');
+  const spotSelect = document.getElementById('fbSpot');
+  const boardSelect = document.getElementById('fbBoard');
+  const tagsContainer = document.getElementById('fbTags');
+  const submitBtn = document.getElementById('fbSubmit');
+
+  // Populate spots
+  SPOTS.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id; opt.textContent = s.name;
+    spotSelect.appendChild(opt);
+  });
+
+  // Populate boards
+  BOARDS.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b.id; opt.textContent = `${b.icon} ${b.name}`;
+    boardSelect.appendChild(opt);
+  });
+
+  // Populate context tags
+  tagsContainer.innerHTML = CONTEXT_TAGS.map((tag, i) => `
+    <input type="checkbox" class="context-tag-input" id="ctx${i}" value="${tag}">
+    <label class="context-tag-label" for="ctx${i}">${tag}</label>
+  `).join('');
+
+  // Default date = now
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  dateInput.value = now.toISOString().slice(0, 16);
+
+  // Open/close
+  fab.addEventListener('click', () => {
+    overlay.classList.add('active');
+    renderPastSessions();
+  });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.classList.remove('active');
+  });
+
+  // Submit
+  submitBtn.addEventListener('click', () => {
+    const spot = spotSelect.value;
+    const board = boardSelect.value;
+    const rating = document.querySelector('#fbStars input:checked')?.value || 3;
+    const tags = [...tagsContainer.querySelectorAll('.context-tag-input:checked')].map(cb => cb.value);
+    const notes = document.getElementById('fbNotes').value;
+    const date = dateInput.value;
+
+    if (!spot) { spotSelect.focus(); return; }
+
+    const entry = {
+      date, spot, board, rating: parseInt(rating), tags, notes,
+      spotName: SPOTS.find(s => s.id === spot)?.name || spot,
+      boardName: BOARDS.find(b => b.id === board)?.name || board,
+      timestamp: Date.now()
+    };
+    saveFeedback(entry);
+
+    // Reset form
+    spotSelect.value = '';
+    boardSelect.value = '';
+    document.getElementById('fbNotes').value = '';
+    document.querySelector('#star3').checked = true;
+    tagsContainer.querySelectorAll('.context-tag-input').forEach(cb => cb.checked = false);
+
+    renderPastSessions();
+
+    // Brief success flash
+    submitBtn.textContent = '✓ Enregistré !';
+    submitBtn.disabled = true;
+    setTimeout(() => { submitBtn.textContent = 'Enregistrer le feedback'; submitBtn.disabled = false; }, 1500);
+  });
+}
+
+function renderPastSessions() {
+  const container = document.getElementById('pastSessions');
+  const sessions = getFeedback();
+  if (sessions.length === 0) {
+    container.innerHTML = '<div class="past-sessions-title">Aucune session enregistrée</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="past-sessions-title">Dernières sessions (${sessions.length})</div>
+    ${sessions.slice(0, 10).map(s => {
+      const d = new Date(s.date);
+      const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      const timeStr = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const stars = '★'.repeat(s.rating) + '☆'.repeat(5 - s.rating);
+      return `<div class="past-session">
+        <span class="past-session-date">${dateStr} ${timeStr}</span>
+        <span class="past-session-spot">${s.spotName}</span>
+        <span class="past-session-stars">${stars}</span>
+        <div class="past-session-tags">
+          ${(s.tags || []).map(t => `<span class="past-session-tag">${t}</span>`).join('')}
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+// ================================================================
+// INIT
+// ================================================================
+setupDayTabs();
+setupFitnessSlider();
+setupFeedbackModal();
+loadData();
+
+// Auto-refresh every 30 minutes
+setInterval(loadData, 30 * 60 * 1000);
+</script>
+</body>
+</html>
