@@ -338,6 +338,26 @@ a { color: var(--blue); text-decoration: none; }
   background: rgba(34,211,238,0.15); color: var(--cyan); border-color: var(--cyan);
 }
 
+/* Quick-pick pills (date & duration) */
+.quick-picks { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.4rem; }
+.quick-pick {
+  font-size: 0.72rem; font-weight: 600; padding: 0.35rem 0.65rem;
+  border-radius: 20px; border: 1px solid var(--border);
+  background: none; color: var(--text-muted); cursor: pointer;
+  font-family: inherit; transition: all 0.15s;
+}
+.quick-pick:hover { border-color: #3a4a65; color: var(--text); }
+.quick-pick.active { background: rgba(34,211,238,0.15); color: var(--cyan); border-color: var(--cyan); }
+.form-row { display: flex; gap: 0.5rem; align-items: flex-end; }
+.form-row > .form-group { flex: 1; margin-bottom: 0; }
+.form-detail-toggle {
+  font-size: 0.65rem; color: var(--text-muted); background: none; border: none;
+  cursor: pointer; font-family: inherit; text-decoration: underline;
+  padding: 0; margin-top: 0.2rem;
+}
+.form-detail-toggle:hover { color: var(--text); }
+.form-hidden { display: none; }
+
 .form-submit {
   width: 100%; padding: 0.75rem; border: none; border-radius: var(--radius-sm);
   background: var(--cyan); color: var(--bg); font-family: inherit;
@@ -406,22 +426,30 @@ a { color: var(--blue); text-decoration: none; }
     <div class="modal-title">Feedback de session</div>
 
     <div class="form-group">
-      <label class="form-label">Date & heure</label>
-      <input type="datetime-local" class="form-input" id="fbDate">
+      <label class="form-label">Quand ?</label>
+      <div class="quick-picks" id="fbDatePicks"></div>
+      <button class="form-detail-toggle" id="fbDateToggle">Choisir une date précise ▾</button>
+      <input type="datetime-local" class="form-input form-hidden" id="fbDate" style="margin-top:0.3rem;">
     </div>
 
-    <div class="form-group">
-      <label class="form-label">Spot</label>
-      <select class="form-select" id="fbSpot">
-        <option value="">Choisis un spot...</option>
-      </select>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Spot</label>
+        <select class="form-select" id="fbSpot">
+          <option value="">Choisis...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Planche</label>
+        <select class="form-select" id="fbBoard">
+          <option value="">Choisis...</option>
+        </select>
+      </div>
     </div>
 
-    <div class="form-group">
-      <label class="form-label">Planche utilisée</label>
-      <select class="form-select" id="fbBoard">
-        <option value="">Choisis une planche...</option>
-      </select>
+    <div class="form-group" style="margin-top:1rem;">
+      <label class="form-label">Durée</label>
+      <div class="quick-picks" id="fbDurationPicks"></div>
     </div>
 
     <div class="form-group">
@@ -436,7 +464,7 @@ a { color: var(--blue); text-decoration: none; }
     </div>
 
     <div class="form-group">
-      <label class="form-label">Contexte (ce qui décrit ta session)</label>
+      <label class="form-label">Contexte</label>
       <div class="context-tags" id="fbTags"></div>
     </div>
 
@@ -1543,22 +1571,114 @@ function setupFeedbackModal() {
   const overlay = document.getElementById('feedbackOverlay');
   const modal = document.getElementById('feedbackModal');
   const dateInput = document.getElementById('fbDate');
+  const dateToggle = document.getElementById('fbDateToggle');
   const spotSelect = document.getElementById('fbSpot');
   const boardSelect = document.getElementById('fbBoard');
   const tagsContainer = document.getElementById('fbTags');
   const submitBtn = document.getElementById('fbSubmit');
+  const datePicks = document.getElementById('fbDatePicks');
+  const durationPicks = document.getElementById('fbDurationPicks');
 
-  // Populate spots
+  // --- Date quick picks ---
+  let selectedDate = null;
+  function buildDatePicks() {
+    const now = new Date();
+    const h = now.getHours();
+    const picks = [];
+
+    // Smart suggestions based on current time
+    if (h >= 6 && h < 12) {
+      picks.push({ label: 'Ce matin', date: todayAt(7, 0) });
+      picks.push({ label: 'Dawn patrol', date: todayAt(6, 30) });
+    }
+    if (h >= 10 && h < 18) {
+      picks.push({ label: 'Ce midi', date: todayAt(12, 0) });
+    }
+    if (h >= 14) {
+      picks.push({ label: 'Cet après-midi', date: todayAt(15, 0) });
+    }
+    if (h >= 17 || h < 6) {
+      picks.push({ label: 'Ce soir', date: todayAt(18, 0) });
+    }
+    // Yesterday options
+    picks.push({ label: 'Hier matin', date: yesterdayAt(8, 0) });
+    picks.push({ label: 'Hier après-midi', date: yesterdayAt(15, 0) });
+    // Always offer "Maintenant"
+    picks.unshift({ label: 'Maintenant', date: now });
+
+    datePicks.innerHTML = picks.map((p, i) =>
+      `<button class="quick-pick" data-idx="${i}">${p.label}</button>`
+    ).join('');
+
+    // Click handler
+    datePicks.querySelectorAll('.quick-pick').forEach((btn, i) => {
+      btn.addEventListener('click', () => {
+        datePicks.querySelectorAll('.quick-pick').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedDate = picks[i].date;
+        // Sync to hidden input
+        const local = new Date(picks[i].date.getTime() - picks[i].date.getTimezoneOffset() * 60000);
+        dateInput.value = local.toISOString().slice(0, 16);
+      });
+    });
+
+    // Auto-select "Maintenant"
+    datePicks.querySelector('.quick-pick').click();
+  }
+
+  function todayAt(hour, min) {
+    const d = new Date(); d.setHours(hour, min, 0, 0); return d;
+  }
+  function yesterdayAt(hour, min) {
+    const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(hour, min, 0, 0); return d;
+  }
+
+  // Toggle precise date picker
+  dateToggle.addEventListener('click', () => {
+    dateInput.classList.toggle('form-hidden');
+    dateToggle.textContent = dateInput.classList.contains('form-hidden')
+      ? 'Choisir une date précise ▾' : 'Masquer ▴';
+  });
+  // If user picks a precise date, deselect quick picks
+  dateInput.addEventListener('change', () => {
+    datePicks.querySelectorAll('.quick-pick').forEach(b => b.classList.remove('active'));
+    selectedDate = new Date(dateInput.value);
+  });
+
+  // --- Duration picks ---
+  const DURATIONS = [
+    { label: '30min', value: 30 },
+    { label: '45min', value: 45 },
+    { label: '1h', value: 60 },
+    { label: '1h15', value: 75 },
+    { label: '1h30', value: 90 },
+    { label: '2h', value: 120 },
+    { label: '2h+', value: 150 },
+  ];
+  let selectedDuration = 60; // default 1h
+
+  durationPicks.innerHTML = DURATIONS.map((d, i) =>
+    `<button class="quick-pick ${d.value === 60 ? 'active' : ''}" data-dur="${d.value}">${d.label}</button>`
+  ).join('');
+
+  durationPicks.querySelectorAll('.quick-pick').forEach(btn => {
+    btn.addEventListener('click', () => {
+      durationPicks.querySelectorAll('.quick-pick').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedDuration = parseInt(btn.dataset.dur);
+    });
+  });
+
+  // --- Populate spots & boards ---
   SPOTS.forEach(s => {
     const opt = document.createElement('option');
     opt.value = s.id; opt.textContent = s.name;
     spotSelect.appendChild(opt);
   });
 
-  // Populate boards
   BOARDS.forEach(b => {
     const opt = document.createElement('option');
-    opt.value = b.id; opt.textContent = `${b.icon} ${b.name}`;
+    opt.value = b.id; opt.textContent = `${b.size} ${b.name}`;
     boardSelect.appendChild(opt);
   });
 
@@ -1568,13 +1688,9 @@ function setupFeedbackModal() {
     <label class="context-tag-label" for="ctx${i}">${tag}</label>
   `).join('');
 
-  // Default date = now
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  dateInput.value = now.toISOString().slice(0, 16);
-
-  // Open/close
+  // --- Open/close ---
   fab.addEventListener('click', () => {
+    buildDatePicks(); // Refresh date suggestions on open
     overlay.classList.add('active');
     renderPastSessions();
   });
@@ -1582,7 +1698,7 @@ function setupFeedbackModal() {
     if (e.target === overlay) overlay.classList.remove('active');
   });
 
-  // Submit
+  // --- Submit ---
   submitBtn.addEventListener('click', () => {
     const spot = spotSelect.value;
     const board = boardSelect.value;
@@ -1595,6 +1711,7 @@ function setupFeedbackModal() {
 
     const entry = {
       date, spot, board, rating: parseInt(rating), tags, notes,
+      duration: selectedDuration,
       spotName: SPOTS.find(s => s.id === spot)?.name || spot,
       boardName: BOARDS.find(b => b.id === board)?.name || board,
       timestamp: Date.now()
@@ -1607,6 +1724,9 @@ function setupFeedbackModal() {
     document.getElementById('fbNotes').value = '';
     document.querySelector('#star3').checked = true;
     tagsContainer.querySelectorAll('.context-tag-input').forEach(cb => cb.checked = false);
+    durationPicks.querySelectorAll('.quick-pick').forEach(b => b.classList.remove('active'));
+    durationPicks.querySelector('[data-dur="60"]').classList.add('active');
+    selectedDuration = 60;
 
     renderPastSessions();
 
@@ -1631,10 +1751,12 @@ function renderPastSessions() {
       const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
       const timeStr = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
       const stars = '★'.repeat(s.rating) + '☆'.repeat(5 - s.rating);
+      const dur = s.duration ? (s.duration >= 60 ? `${Math.floor(s.duration/60)}h${s.duration%60 ? s.duration%60 : ''}` : `${s.duration}min`) : '';
       return `<div class="past-session">
         <span class="past-session-date">${dateStr} ${timeStr}</span>
         <span class="past-session-spot">${s.spotName}</span>
         <span class="past-session-stars">${stars}</span>
+        ${dur ? `<span class="past-session-tag">${dur}</span>` : ''}
         <div class="past-session-tags">
           ${(s.tags || []).map(t => `<span class="past-session-tag">${t}</span>`).join('')}
         </div>
