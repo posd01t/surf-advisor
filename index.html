@@ -2066,7 +2066,7 @@ function showExportFallback(text, onSuccess) {
 // ================================================================
 const AVAIL_MIN_HOUR = 5, AVAIL_MAX_HOUR = 21;
 let availStart = 6, availEnd = 21; // default: toute la journée (6h-21h)
-let availActive = false; // panel open?
+let activePresets = new Set(); // indices of selected presets
 
 const AVAIL_PRESETS = [
   { label: 'Dawn', icon: '🌅', start: 6, end: 9 },
@@ -2075,6 +2075,20 @@ const AVAIL_PRESETS = [
   { label: 'Aprèm', icon: '🏖️', start: 14, end: 18 },
   { label: 'Apéro', icon: '🍻', start: 17, end: 20 },
 ];
+
+function mergePresets() {
+  if (activePresets.size === 0) {
+    availStart = 6; availEnd = 21;
+    return;
+  }
+  let minS = 24, maxE = 0;
+  for (const idx of activePresets) {
+    minS = Math.min(minS, AVAIL_PRESETS[idx].start);
+    maxE = Math.max(maxE, AVAIL_PRESETS[idx].end);
+  }
+  availStart = minS;
+  availEnd = maxE;
+}
 
 // Sunrise/sunset calc (simplified solar position for Biarritz ~43.48°N)
 function calcSunTimes(date) {
@@ -2131,10 +2145,9 @@ function updateAvailUI() {
     label.textContent = `${hourToLabel(availStart)} → ${hourToLabel(availEnd)}`;
   }
 
-  // Highlight matching preset
-  document.querySelectorAll('.avail-preset').forEach(btn => {
-    const s = parseFloat(btn.dataset.start), e = parseFloat(btn.dataset.end);
-    btn.classList.toggle('active', Math.abs(s - availStart) < 0.3 && Math.abs(e - availEnd) < 0.3);
+  // Highlight active presets
+  document.querySelectorAll('.avail-preset').forEach((btn, i) => {
+    btn.classList.toggle('active', activePresets.has(i));
   });
 }
 
@@ -2148,13 +2161,14 @@ function setupAvailability() {
   presetsEl.addEventListener('click', e => {
     const btn = e.target.closest('.avail-preset');
     if (!btn) return;
-    const s = parseFloat(btn.dataset.start), en = parseFloat(btn.dataset.end);
-    // Toggle off: if same preset clicked again, reset to full day
-    if (Math.abs(s - availStart) < 0.3 && Math.abs(en - availEnd) < 0.3) {
-      availStart = 6; availEnd = 21;
+    const idx = [...presetsEl.children].indexOf(btn);
+    // Toggle this preset on/off
+    if (activePresets.has(idx)) {
+      activePresets.delete(idx);
     } else {
-      availStart = s; availEnd = en;
+      activePresets.add(idx);
     }
+    mergePresets();
     updateAvailUI();
     renderAll();
   });
@@ -2212,7 +2226,9 @@ function setupThumbDrag(thumbId, which) {
     const upHandler = () => {
       document.removeEventListener('mousemove', moveHandler);
       document.removeEventListener('mouseup', upHandler);
-      renderAll(); // re-render on release
+      activePresets.clear(); // manual drag overrides presets
+      updateAvailUI();
+      renderAll();
     };
     document.addEventListener('mousemove', moveHandler);
     document.addEventListener('mouseup', upHandler);
@@ -2227,6 +2243,8 @@ function setupThumbDrag(thumbId, which) {
     const endHandler = () => {
       document.removeEventListener('touchmove', moveHandler);
       document.removeEventListener('touchend', endHandler);
+      activePresets.clear();
+      updateAvailUI();
       renderAll();
     };
     document.addEventListener('touchmove', moveHandler, { passive: false });
