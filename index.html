@@ -90,7 +90,7 @@ a { color: var(--blue); text-decoration: none; }
 .avail-panel.open { max-height: 220px; }
 .avail-inner { padding: 0.6rem 0.75rem 0.75rem; }
 
-.avail-presets { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.6rem; }
+.avail-presets { display: flex; flex-wrap: nowrap; gap: 0.3rem; margin-bottom: 0.6rem; }
 .avail-preset {
   font-size: 0.65rem; font-weight: 600; padding: 0.25rem 0.55rem;
   border-radius: 20px; border: 1px solid var(--border);
@@ -841,7 +841,7 @@ async function fetchMarineData() {
   // Use a central point for the Basque coast - data is regional anyway
   const url = 'https://marine-api.open-meteo.com/v1/marine'
     + '?latitude=43.48&longitude=-1.56'
-    + '&hourly=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,wind_wave_period'
+    + '&hourly=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,wind_wave_period,sea_surface_temperature'
     + '&forecast_days=3&timezone=Europe%2FParis';
   return fetchWithCache(url, 'marine');
 }
@@ -865,6 +865,7 @@ function getHourlyData(marine, weather, hourIndex) {
     swellPeriod: marine.hourly.swell_wave_period[hourIndex],
     windWaveHeight: marine.hourly.wind_wave_height[hourIndex],
     windWavePeriod: marine.hourly.wind_wave_period[hourIndex],
+    waterTemp: marine.hourly.sea_surface_temperature?.[hourIndex] ?? null,
     windSpeed: weather.hourly.wind_speed_10m[hourIndex],
     windDir: weather.hourly.wind_direction_10m[hourIndex],
     windGusts: weather.hourly.wind_gusts_10m[hourIndex],
@@ -876,7 +877,7 @@ function getHourlyData(marine, weather, hourIndex) {
 // Get average conditions for a time window (e.g., 6h-12h for morning session)
 function getWindowAverage(marine, weather, startHourIdx, count) {
   const fields = ['waveHeight', 'wavePeriod', 'swellHeight', 'swellPeriod', 'windWaveHeight',
-    'windSpeed', 'windGusts', 'temp'];
+    'windSpeed', 'windGusts', 'temp', 'waterTemp'];
   const dirFields = ['waveDir', 'swellDir', 'windDir'];
 
   const sum = {};
@@ -1198,6 +1199,14 @@ function weatherIcon(code) {
   return '⛈️';
 }
 
+function recommendWetsuit(waterTemp) {
+  if (waterTemp == null) return null;
+  if (waterTemp >= 23) return { label: 'Boardshort', icon: '🩳' };
+  if (waterTemp >= 20) return { label: 'Top 1mm', icon: '👕' };
+  if (waterTemp >= 15) return { label: '3/2', icon: '🧥' };
+  return { label: '4/3', icon: '🧥' };
+}
+
 function renderSpotCard(spot, result, conditions, tideData, now, rank, fitness) {
   const waveH = result.localWaveHeight || (conditions.swellHeight || conditions.waveHeight) * (spot.swellFactor || 0.85);
   const crowded = isCrowdedTime(now);
@@ -1219,6 +1228,8 @@ function renderSpotCard(spot, result, conditions, tideData, now, rank, fitness) 
       <div class="spot-meta">
         <span class="spot-meta-item">🚗 ${spot.driveMin} min</span>
         <span class="spot-meta-item">${weatherIcon(conditions.weatherCode)} ${conditions.temp.toFixed(0)}°C</span>
+        ${conditions.waterTemp != null ? `<span class="spot-meta-item">🌊 ${conditions.waterTemp.toFixed(0)}°C</span>` : ''}
+        ${(() => { const ws = recommendWetsuit(conditions.waterTemp); return ws ? `<span class="spot-meta-item">${ws.icon} ${ws.label}</span>` : ''; })()}
         ${crowded ? '<span class="spot-meta-item">👥 Affluence</span>' : ''}
       </div>
       <div class="cond-grid">
@@ -1881,12 +1892,11 @@ let availStart = 6, availEnd = 21; // default: toute la journée (6h-21h)
 let availActive = false; // panel open?
 
 const AVAIL_PRESETS = [
-  { label: 'Dawn patrol', icon: '🌅', start: 6, end: 9 },
+  { label: 'Dawn', icon: '🌅', start: 6, end: 9 },
   { label: 'Matin', icon: '☀️', start: 8, end: 12 },
-  { label: 'Pause déj', icon: '🍔', start: 11.5, end: 14 },
-  { label: 'Après-midi', icon: '🏖️', start: 14, end: 18 },
-  { label: 'Après le taf', icon: '💼', start: 17, end: 20 },
-  { label: 'Journée', icon: '📅', start: 6, end: 21 },
+  { label: 'Déj', icon: '🍔', start: 11.5, end: 14 },
+  { label: 'Aprèm', icon: '🏖️', start: 14, end: 18 },
+  { label: 'Apéro', icon: '🍻', start: 17, end: 20 },
 ];
 
 // Sunrise/sunset calc (simplified solar position for Biarritz ~43.48°N)
@@ -1961,8 +1971,13 @@ function setupAvailability() {
   presetsEl.addEventListener('click', e => {
     const btn = e.target.closest('.avail-preset');
     if (!btn) return;
-    availStart = parseFloat(btn.dataset.start);
-    availEnd = parseFloat(btn.dataset.end);
+    const s = parseFloat(btn.dataset.start), en = parseFloat(btn.dataset.end);
+    // Toggle off: if same preset clicked again, reset to full day
+    if (Math.abs(s - availStart) < 0.3 && Math.abs(en - availEnd) < 0.3) {
+      availStart = 6; availEnd = 21;
+    } else {
+      availStart = s; availEnd = en;
+    }
     updateAvailUI();
     renderAll();
   });
