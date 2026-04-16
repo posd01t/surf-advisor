@@ -397,10 +397,25 @@ a { color: var(--blue); text-decoration: none; }
 .star-rating input:checked ~ label { color: var(--amber); }
 
 /* Context tags (checkbox pills) */
-.context-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.context-tags { display: flex; flex-direction: column; gap: 0.4rem; }
+.tag-category { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.tag-cat-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.35rem 0.6rem; cursor: pointer; font-size: 0.72rem; font-weight: 700;
+  color: var(--text-muted); background: rgba(255,255,255,0.02);
+}
+.tag-cat-header:hover { background: rgba(255,255,255,0.04); }
+.tag-cat-arrow { font-size: 0.6rem; transition: transform 0.2s; }
+.tag-cat-header.open .tag-cat-arrow { transform: rotate(180deg); }
+.tag-cat-count { font-size: 0.6rem; color: var(--cyan); margin-left: 0.4rem; }
+.tag-cat-body {
+  display: none; flex-wrap: wrap; gap: 0.3rem;
+  padding: 0.3rem 0.5rem 0.45rem;
+}
+.tag-cat-body.open { display: flex; }
 .context-tag-input { display: none; }
 .context-tag-label {
-  font-size: 0.72rem; font-weight: 600; padding: 0.3rem 0.6rem;
+  font-size: 0.7rem; font-weight: 600; padding: 0.25rem 0.55rem;
   border-radius: 20px; border: 1px solid var(--border);
   color: var(--text-muted); cursor: pointer; transition: all 0.15s;
   user-select: none;
@@ -539,6 +554,7 @@ a { color: var(--blue); text-decoration: none; }
         <select class="form-select" id="fbSpot">
           <option value="">Choisis...</option>
         </select>
+        <input type="text" class="form-input form-hidden" id="fbSpotOther" placeholder="Nom du spot..." style="margin-top:0.3rem;">
       </div>
       <div class="form-group">
         <label class="form-label">Planche</label>
@@ -1138,7 +1154,7 @@ function scoreColor(score) {
   return 'red';
 }
 
-function renderTideSVG(tideData, now, bestTidePhases, width = 280, height = 55) {
+function renderTideSVG(tideData, now, bestTidePhases, width = 280, height = 55, availFromH, availToH) {
   const times = tideData.map(p => p.time.getTime());
   const heights = tideData.map(p => p.height);
   const minT = times[0], maxT = times[times.length - 1];
@@ -1183,10 +1199,27 @@ function renderTideSVG(tideData, now, bestTidePhases, width = 280, height = 55) 
     extremeLabels += `<text x="${ex}" y="${ly}" fill="${ext.type === 'high' ? '#60a5fa' : '#94a3b8'}" font-size="6.5" font-weight="600" text-anchor="middle">${ext.height.toFixed(1)}m</text>`;
   }
 
+  // Availability window overlay
+  let availOverlay = '';
+  if (availFromH != null && availToH != null && !(availFromH <= 6 && availToH >= 20.5)) {
+    const dayStart = new Date(tideData[0].time);
+    dayStart.setHours(0, 0, 0, 0);
+    const aFromT = new Date(dayStart); aFromT.setHours(Math.floor(availFromH), (availFromH % 1) * 60);
+    const aToT = new Date(dayStart); aToT.setHours(Math.floor(availToH), (availToH % 1) * 60);
+    const ax1 = x(aFromT.getTime()), ax2 = x(aToT.getTime());
+    // Dim areas outside availability
+    availOverlay = `
+      <rect x="${pad}" y="${pad}" width="${Math.max(0, ax1 - pad)}" height="${height - pad - 6}" fill="rgba(11,17,32,0.6)"/>
+      <rect x="${ax2.toFixed(1)}" y="${pad}" width="${Math.max(0, width - pad - ax2)}" height="${height - pad - 6}" fill="rgba(11,17,32,0.6)"/>
+      <line x1="${ax1.toFixed(1)}" y1="${pad}" x2="${ax1.toFixed(1)}" y2="${height - 6}" stroke="var(--cyan)" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.5"/>
+      <line x1="${ax2.toFixed(1)}" y1="${pad}" x2="${ax2.toFixed(1)}" y2="${height - 6}" stroke="var(--cyan)" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.5"/>`;
+  }
+
   return `<svg class="tide-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
     ${hourLabels}
     <path d="${fillD}" fill="rgba(96,165,250,0.08)"/>
     <path d="${pathD}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-linejoin="round"/>
+    ${availOverlay}
     ${extremeLabels}
     <circle cx="${nowX.toFixed(1)}" cy="${nowY.toFixed(1)}" r="3" fill="#22d3ee"/>
     <line x1="${nowX.toFixed(1)}" y1="${pad}" x2="${nowX.toFixed(1)}" y2="${height - 6}" stroke="#22d3ee" stroke-width="0.5" stroke-dasharray="2,2"/>
@@ -1260,7 +1293,7 @@ function renderSpotCard(spot, result, conditions, tideData, now, rank, fitness) 
           <span class="tide-title">Marée aujourd'hui</span>
           <span class="tide-title">Coeff ~${getTidalCoefficient(now)}</span>
         </div>
-        ${renderTideSVG(tideData, now)}
+        ${renderTideSVG(tideData, now, undefined, undefined, undefined, availStart, availEnd)}
       </div>
       ${bestSlot ? `
       <div class="best-slot">
@@ -1671,23 +1704,14 @@ function renderTop3Bar(active, now, fitness) {
 // FEEDBACK SYSTEM
 // ================================================================
 const FEEDBACK_KEY = 'olapierre_feedback';
-const CONTEXT_TAGS = [
-  // Conditions réelles
-  'Vagues parfaites', 'Trop gros', 'Trop petit', 'Vagues fermées',
-  'Glassy', 'Vent onshore', 'Courant fort',
-  // Crowd
-  'Crowdé', 'Personne à l\'eau',
-  // Confort
-  'Eau froide', 'Eau chaude', 'Mal équipé (combi)',
-  // Physique / technique
-  'En pleine forme', 'Fatigue', 'Difficulté à passer la barre',
-  'Galéré au takeoff', 'Bonnes séries régulières', 'Longue attente entre séries',
-  // Prévision vs réalité
-  'Prévision spot OK', 'Prévision spot fausse',
-  'Bonne reco planche', 'Mauvaise reco planche',
-  // Divers
-  'Décalage horaire marée', 'Spot en travaux / dégradé'
+const TAG_CATEGORIES = [
+  { name: '🌊 Vagues', tags: ['Vagues parfaites', 'Trop gros', 'Trop petit', 'Vagues fermées', 'Glassy', 'Vent onshore', 'Courant fort'] },
+  { name: '🏄 Session', tags: ['En pleine forme', 'Fatigue', 'Surf combat', 'Difficulté à passer la barre', 'Galéré au takeoff', 'Bonnes séries régulières', 'Longue attente entre séries'] },
+  { name: '📍 Spot & confort', tags: ['Crowdé', 'Personne à l\'eau', 'Eau froide', 'Eau chaude', 'Mal équipé (combi)', 'Spot en travaux / dégradé'] },
+  { name: '🎯 Prévision app', tags: ['Prévision spot OK', 'Prévision spot fausse', 'Bonne reco planche', 'Mauvaise reco planche', 'Décalage horaire marée'] },
 ];
+// Flat list for backward compat
+const CONTEXT_TAGS = TAG_CATEGORIES.flatMap(c => c.tags);
 
 function getFeedback() {
   try { return JSON.parse(localStorage.getItem(FEEDBACK_KEY) || '[]'); }
@@ -1809,6 +1833,12 @@ function setupFeedbackModal() {
     opt.value = s.id; opt.textContent = s.name;
     spotSelect.appendChild(opt);
   });
+  { const opt = document.createElement('option'); opt.value = '__other__'; opt.textContent = '📍 Autre...'; spotSelect.appendChild(opt); }
+  const spotOtherInput = document.getElementById('fbSpotOther');
+  spotSelect.addEventListener('change', () => {
+    spotOtherInput.classList.toggle('form-hidden', spotSelect.value !== '__other__');
+    if (spotSelect.value === '__other__') spotOtherInput.focus();
+  });
 
   BOARDS.forEach(b => {
     const opt = document.createElement('option');
@@ -1816,11 +1846,38 @@ function setupFeedbackModal() {
     boardSelect.appendChild(opt);
   });
 
-  // Populate context tags
-  tagsContainer.innerHTML = CONTEXT_TAGS.map((tag, i) => `
-    <input type="checkbox" class="context-tag-input" id="ctx${i}" value="${tag}">
-    <label class="context-tag-label" for="ctx${i}">${tag}</label>
-  `).join('');
+  // Populate context tags by category
+  let tagIdx = 0;
+  tagsContainer.innerHTML = TAG_CATEGORIES.map((cat, ci) => {
+    const tagsHtml = cat.tags.map(tag => {
+      const id = `ctx${tagIdx++}`;
+      return `<input type="checkbox" class="context-tag-input" id="${id}" value="${tag}"><label class="context-tag-label" for="${id}">${tag}</label>`;
+    }).join('');
+    return `<div class="tag-category">
+      <div class="tag-cat-header" data-cat="${ci}">${cat.name}<span><span class="tag-cat-count" data-catcount="${ci}"></span> <span class="tag-cat-arrow">▼</span></span></div>
+      <div class="tag-cat-body" data-catbody="${ci}">${tagsHtml}</div>
+    </div>`;
+  }).join('');
+
+  // Expand/collapse + count selected
+  tagsContainer.addEventListener('click', e => {
+    const header = e.target.closest('.tag-cat-header');
+    if (header) {
+      const ci = header.dataset.cat;
+      header.classList.toggle('open');
+      document.querySelector(`[data-catbody="${ci}"]`).classList.toggle('open');
+    }
+  });
+  tagsContainer.addEventListener('change', () => {
+    TAG_CATEGORIES.forEach((cat, ci) => {
+      const body = document.querySelector(`[data-catbody="${ci}"]`);
+      const checked = body.querySelectorAll('.context-tag-input:checked').length;
+      document.querySelector(`[data-catcount="${ci}"]`).textContent = checked ? `(${checked})` : '';
+    });
+  });
+  // Open first category by default
+  document.querySelector('.tag-cat-header[data-cat="0"]').classList.add('open');
+  document.querySelector('[data-catbody="0"]').classList.add('open');
 
   // --- Open/close ---
   fab.addEventListener('click', () => {
@@ -1842,11 +1899,16 @@ function setupFeedbackModal() {
     const date = dateInput.value;
 
     if (!spot) { spotSelect.focus(); return; }
+    if (spot === '__other__' && !spotOtherInput.value.trim()) { spotOtherInput.focus(); return; }
+
+    const isOther = spot === '__other__';
+    const spotId = isOther ? '__other__' : spot;
+    const spotName = isOther ? spotOtherInput.value.trim() : (SPOTS.find(s => s.id === spot)?.name || spot);
 
     const entry = {
-      date, spot, board, rating: parseInt(rating), tags, notes,
+      date, spot: spotId, board, rating: parseInt(rating), tags, notes,
       duration: selectedDuration,
-      spotName: SPOTS.find(s => s.id === spot)?.name || spot,
+      spotName,
       boardName: BOARDS.find(b => b.id === board)?.name || board,
       timestamp: Date.now()
     };
@@ -1854,10 +1916,13 @@ function setupFeedbackModal() {
 
     // Reset form
     spotSelect.value = '';
+    spotOtherInput.value = '';
+    spotOtherInput.classList.add('form-hidden');
     boardSelect.value = '';
     document.getElementById('fbNotes').value = '';
     document.querySelector('#star3').checked = true;
     tagsContainer.querySelectorAll('.context-tag-input').forEach(cb => cb.checked = false);
+    tagsContainer.querySelectorAll('.tag-cat-count').forEach(el => el.textContent = '');
     durationPicks.querySelectorAll('.quick-pick').forEach(b => b.classList.remove('active'));
     durationPicks.querySelector('[data-dur="60"]').classList.add('active');
     selectedDuration = 60;
