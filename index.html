@@ -1154,23 +1154,23 @@ function scoreColor(score) {
   return 'red';
 }
 
-function renderTideSVG(tideData, now, bestTidePhases, width = 280, height = 55, availFromH, availToH) {
+function renderTideSVG(tideData, now, bestTidePhases, width = 300, height = 75, availFromH, availToH) {
   const times = tideData.map(p => p.time.getTime());
   const heights = tideData.map(p => p.height);
   const minT = times[0], maxT = times[times.length - 1];
   const minH = Math.min(...heights), maxH = Math.max(...heights);
   const rangeH = maxH - minH || 1;
-  const pad = 4;
+  const padTop = 14, padBot = 12, padX = 4;
 
-  const x = t => pad + ((t - minT) / (maxT - minT)) * (width - 2 * pad);
-  const y = h => height - pad - ((h - minH) / rangeH) * (height - 2 * pad);
+  const x = t => padX + ((t - minT) / (maxT - minT)) * (width - 2 * padX);
+  const y = h => height - padBot - ((h - minH) / rangeH) * (height - padTop - padBot);
 
   // Build path
   const pts = tideData.map(p => `${x(p.time.getTime()).toFixed(1)},${y(p.height).toFixed(1)}`);
   const pathD = 'M' + pts.join('L');
 
   // Fill area
-  const fillD = pathD + `L${x(maxT).toFixed(1)},${height}L${x(minT).toFixed(1)},${height}Z`;
+  const fillD = pathD + `L${x(maxT).toFixed(1)},${height - padBot}L${x(minT).toFixed(1)},${height - padBot}Z`;
 
   // Now marker
   const nowX = x(now.getTime());
@@ -1184,19 +1184,31 @@ function renderTideSVG(tideData, now, bestTidePhases, width = 280, height = 55, 
   for (let h = new Date(startHour); h.getTime() <= maxT; h.setHours(h.getHours() + 3)) {
     if (h.getTime() >= minT) {
       const hx = x(h.getTime());
-      hourLabels += `<text x="${hx}" y="${height - 0.5}" fill="#475569" font-size="7" text-anchor="middle">${h.getHours()}h</text>`;
-      hourLabels += `<line x1="${hx}" y1="${pad}" x2="${hx}" y2="${height - 6}" stroke="#1e2a3f" stroke-width="0.5"/>`;
+      hourLabels += `<text x="${hx}" y="${height - 1}" fill="#475569" font-size="8" text-anchor="middle">${h.getHours()}h</text>`;
+      hourLabels += `<line x1="${hx}" y1="${padTop}" x2="${hx}" y2="${height - padBot}" stroke="#1e2a3f" stroke-width="0.5"/>`;
     }
   }
 
-  // Extremes labels
+  // Extremes labels — show height + time
   const extremes = getTideExtremes(tideData);
   let extremeLabels = '';
   for (const ext of extremes) {
     const ex = x(ext.time.getTime());
     const ey = y(ext.height);
-    const ly = ext.type === 'high' ? ey - 5 : ey + 9;
-    extremeLabels += `<text x="${ex}" y="${ly}" fill="${ext.type === 'high' ? '#60a5fa' : '#94a3b8'}" font-size="6.5" font-weight="600" text-anchor="middle">${ext.height.toFixed(1)}m</text>`;
+    const hLabel = `${ext.height.toFixed(1)}m`;
+    const tLabel = `${ext.time.getHours()}h${ext.time.getMinutes() > 0 ? ext.time.getMinutes().toString().padStart(2, '0') : ''}`;
+    const isHigh = ext.type === 'high';
+    const color = isHigh ? '#60a5fa' : '#94a3b8';
+    // Clamp label positions to stay within chart area
+    if (isHigh) {
+      const ty1 = Math.max(8, ey - 5);
+      extremeLabels += `<text x="${ex}" y="${ty1}" fill="${color}" font-size="7.5" font-weight="700" text-anchor="middle">${hLabel} <tspan font-size="6" font-weight="400" opacity="0.7">${tLabel}</tspan></text>`;
+    } else {
+      const ty1 = Math.min(height - padBot - 2, ey + 10);
+      extremeLabels += `<text x="${ex}" y="${ty1}" fill="${color}" font-size="7.5" font-weight="700" text-anchor="middle">${hLabel} <tspan font-size="6" font-weight="400" opacity="0.7">${tLabel}</tspan></text>`;
+    }
+    // Small dot at extreme
+    extremeLabels += `<circle cx="${ex}" cy="${ey}" r="1.5" fill="${color}" opacity="0.6"/>`;
   }
 
   // Availability window overlay
@@ -1207,22 +1219,21 @@ function renderTideSVG(tideData, now, bestTidePhases, width = 280, height = 55, 
     const aFromT = new Date(dayStart); aFromT.setHours(Math.floor(availFromH), (availFromH % 1) * 60);
     const aToT = new Date(dayStart); aToT.setHours(Math.floor(availToH), (availToH % 1) * 60);
     const ax1 = x(aFromT.getTime()), ax2 = x(aToT.getTime());
-    // Dim areas outside availability
     availOverlay = `
-      <rect x="${pad}" y="${pad}" width="${Math.max(0, ax1 - pad)}" height="${height - pad - 6}" fill="rgba(11,17,32,0.6)"/>
-      <rect x="${ax2.toFixed(1)}" y="${pad}" width="${Math.max(0, width - pad - ax2)}" height="${height - pad - 6}" fill="rgba(11,17,32,0.6)"/>
-      <line x1="${ax1.toFixed(1)}" y1="${pad}" x2="${ax1.toFixed(1)}" y2="${height - 6}" stroke="var(--cyan)" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.5"/>
-      <line x1="${ax2.toFixed(1)}" y1="${pad}" x2="${ax2.toFixed(1)}" y2="${height - 6}" stroke="var(--cyan)" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.5"/>`;
+      <rect x="${padX}" y="${padTop}" width="${Math.max(0, ax1 - padX)}" height="${height - padTop - padBot}" fill="rgba(11,17,32,0.45)"/>
+      <rect x="${ax2.toFixed(1)}" y="${padTop}" width="${Math.max(0, width - padX - ax2)}" height="${height - padTop - padBot}" fill="rgba(11,17,32,0.45)"/>
+      <line x1="${ax1.toFixed(1)}" y1="${padTop}" x2="${ax1.toFixed(1)}" y2="${height - padBot}" stroke="var(--cyan)" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.5"/>
+      <line x1="${ax2.toFixed(1)}" y1="${padTop}" x2="${ax2.toFixed(1)}" y2="${height - padBot}" stroke="var(--cyan)" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.5"/>`;
   }
 
   return `<svg class="tide-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
     ${hourLabels}
-    <path d="${fillD}" fill="rgba(96,165,250,0.08)"/>
-    <path d="${pathD}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="${fillD}" fill="rgba(96,165,250,0.1)"/>
+    <path d="${pathD}" fill="none" stroke="#60a5fa" stroke-width="1.8" stroke-linejoin="round"/>
     ${availOverlay}
     ${extremeLabels}
-    <circle cx="${nowX.toFixed(1)}" cy="${nowY.toFixed(1)}" r="3" fill="#22d3ee"/>
-    <line x1="${nowX.toFixed(1)}" y1="${pad}" x2="${nowX.toFixed(1)}" y2="${height - 6}" stroke="#22d3ee" stroke-width="0.5" stroke-dasharray="2,2"/>
+    <circle cx="${nowX.toFixed(1)}" cy="${nowY.toFixed(1)}" r="3.5" fill="#22d3ee"/>
+    <line x1="${nowX.toFixed(1)}" y1="${padTop}" x2="${nowX.toFixed(1)}" y2="${height - padBot}" stroke="#22d3ee" stroke-width="0.5" stroke-dasharray="2,2"/>
   </svg>`;
 }
 
