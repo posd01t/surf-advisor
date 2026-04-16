@@ -210,7 +210,7 @@ a { color: var(--blue); text-decoration: none; }
   margin-bottom: 0.3rem;
 }
 .tide-title { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
-.tide-svg { width: 100%; height: 80px; }
+.tide-svg { width: 100%; height: 95px; }
 
 /* Board recommendation */
 .board-rec {
@@ -1154,13 +1154,13 @@ function scoreColor(score) {
   return 'red';
 }
 
-function renderTideSVG(tideData, now, bestTidePhases, width = 300, height = 85, availFromH, availToH) {
+function renderTideSVG(tideData, now, bestTidePhases, width = 300, height = 95, availFromH, availToH) {
   const times = tideData.map(p => p.time.getTime());
   const heights = tideData.map(p => p.height);
   const minT = times[0], maxT = times[times.length - 1];
   const minH = Math.min(...heights), maxH = Math.max(...heights);
   const rangeH = maxH - minH || 1;
-  const padTop = 14, padBot = 12, padX = 4;
+  const padTop = 22, padBot = 14, padX = 4;
 
   const x = t => padX + ((t - minT) / (maxT - minT)) * (width - 2 * padX);
   const y = h => height - padBot - ((h - minH) / rangeH) * (height - padTop - padBot);
@@ -1184,12 +1184,12 @@ function renderTideSVG(tideData, now, bestTidePhases, width = 300, height = 85, 
   for (let h = new Date(startHour); h.getTime() <= maxT; h.setHours(h.getHours() + 3)) {
     if (h.getTime() >= minT) {
       const hx = x(h.getTime());
-      hourLabels += `<text x="${hx}" y="${height - 1}" fill="#475569" font-size="8" text-anchor="middle">${h.getHours()}h</text>`;
+      hourLabels += `<text x="${hx}" y="${height - 1}" fill="#64748b" font-size="9" text-anchor="middle">${h.getHours()}h</text>`;
       hourLabels += `<line x1="${hx}" y1="${padTop}" x2="${hx}" y2="${height - padBot}" stroke="#1e2a3f" stroke-width="0.5"/>`;
     }
   }
 
-  // Extremes labels — show height + time
+  // Extremes labels — height on one line, time on another
   const extremes = getTideExtremes(tideData);
   let extremeLabels = '';
   for (const ext of extremes) {
@@ -1199,16 +1199,14 @@ function renderTideSVG(tideData, now, bestTidePhases, width = 300, height = 85, 
     const tLabel = `${ext.time.getHours()}h${ext.time.getMinutes() > 0 ? ext.time.getMinutes().toString().padStart(2, '0') : ''}`;
     const isHigh = ext.type === 'high';
     const color = isHigh ? '#60a5fa' : '#94a3b8';
-    // Clamp label positions to stay within chart area
     if (isHigh) {
-      const ty1 = Math.max(8, ey - 5);
-      extremeLabels += `<text x="${ex}" y="${ty1}" fill="${color}" font-size="7.5" font-weight="700" text-anchor="middle">${hLabel} <tspan font-size="6" font-weight="400" opacity="0.7">${tLabel}</tspan></text>`;
+      extremeLabels += `<text x="${ex}" y="${Math.max(9, ey - 12)}" fill="${color}" font-size="9" font-weight="700" text-anchor="middle">${hLabel}</text>`;
+      extremeLabels += `<text x="${ex}" y="${Math.max(19, ey - 2)}" fill="${color}" font-size="8" font-weight="600" text-anchor="middle">${tLabel}</text>`;
     } else {
-      const ty1 = Math.min(height - padBot - 2, ey + 10);
-      extremeLabels += `<text x="${ex}" y="${ty1}" fill="${color}" font-size="7.5" font-weight="700" text-anchor="middle">${hLabel} <tspan font-size="6" font-weight="400" opacity="0.7">${tLabel}</tspan></text>`;
+      extremeLabels += `<text x="${ex}" y="${Math.min(height - padBot - 10, ey + 12)}" fill="${color}" font-size="9" font-weight="700" text-anchor="middle">${hLabel}</text>`;
+      extremeLabels += `<text x="${ex}" y="${Math.min(height - padBot - 1, ey + 22)}" fill="${color}" font-size="8" font-weight="600" text-anchor="middle">${tLabel}</text>`;
     }
-    // Small dot at extreme
-    extremeLabels += `<circle cx="${ex}" cy="${ey}" r="1.5" fill="${color}" opacity="0.6"/>`;
+    extremeLabels += `<circle cx="${ex}" cy="${ey}" r="2" fill="${color}" opacity="0.7"/>`;
   }
 
   // Availability window overlay
