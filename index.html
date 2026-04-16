@@ -577,6 +577,12 @@ a { color: var(--blue); text-decoration: none; }
     <button class="form-submit" id="fbSubmit">Enregistrer le feedback</button>
 
     <div class="past-sessions" id="pastSessions"></div>
+    <div class="export-section" id="exportSection" style="display:none;">
+      <button class="form-submit" id="fbExport" style="background:var(--purple);margin-top:0.75rem;">
+        📋 Exporter pour calibration
+      </button>
+      <div class="export-hint" id="exportHint" style="font-size:0.65rem;color:var(--text-muted);text-align:center;margin-top:0.3rem;"></div>
+    </div>
   </div>
 </div>
 
@@ -1666,12 +1672,21 @@ function renderTop3Bar(active, now, fitness) {
 // ================================================================
 const FEEDBACK_KEY = 'olapierre_feedback';
 const CONTEXT_TAGS = [
-  'Vagues parfaites', 'Trop gros', 'Trop petit', 'Vent onshore',
-  'Glassy', 'Crowdé', 'Personne à l\'eau', 'Courant fort',
-  'Vagues fermées', 'Eau froide', 'Eau chaude',
-  'Fatigue', 'En pleine forme', 'Difficulté à passer la barre',
-  'Bonnes séries régulières', 'Longue attente entre séries',
-  'Bonne recommandation app', 'Mauvaise recommandation app'
+  // Conditions réelles
+  'Vagues parfaites', 'Trop gros', 'Trop petit', 'Vagues fermées',
+  'Glassy', 'Vent onshore', 'Courant fort',
+  // Crowd
+  'Crowdé', 'Personne à l\'eau',
+  // Confort
+  'Eau froide', 'Eau chaude', 'Mal équipé (combi)',
+  // Physique / technique
+  'En pleine forme', 'Fatigue', 'Difficulté à passer la barre',
+  'Galéré au takeoff', 'Bonnes séries régulières', 'Longue attente entre séries',
+  // Prévision vs réalité
+  'Prévision spot OK', 'Prévision spot fausse',
+  'Bonne reco planche', 'Mauvaise reco planche',
+  // Divers
+  'Décalage horaire marée', 'Spot en travaux / dégradé'
 ];
 
 function getFeedback() {
@@ -1854,34 +1869,122 @@ function setupFeedbackModal() {
     submitBtn.disabled = true;
     setTimeout(() => { submitBtn.textContent = 'Enregistrer le feedback'; submitBtn.disabled = false; }, 1500);
   });
+
+  // --- Export ---
+  document.getElementById('fbExport').addEventListener('click', exportFeedback);
 }
 
 function renderPastSessions() {
   const container = document.getElementById('pastSessions');
   const sessions = getFeedback();
+  const unprocessed = sessions.filter(s => !s.processed);
+  const exportSection = document.getElementById('exportSection');
+  const exportHint = document.getElementById('exportHint');
+
   if (sessions.length === 0) {
     container.innerHTML = '<div class="past-sessions-title">Aucune session enregistrée</div>';
+    exportSection.style.display = 'none';
     return;
   }
+
   container.innerHTML = `
-    <div class="past-sessions-title">Dernières sessions (${sessions.length})</div>
+    <div class="past-sessions-title">Dernières sessions (${sessions.length})${unprocessed.length < sessions.length ? ` · <span style="color:var(--purple)">${unprocessed.length} à exporter</span>` : ''}</div>
     ${sessions.slice(0, 10).map(s => {
       const d = new Date(s.date);
       const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
       const timeStr = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
       const stars = '★'.repeat(s.rating) + '☆'.repeat(5 - s.rating);
       const dur = s.duration ? (s.duration >= 60 ? `${Math.floor(s.duration/60)}h${s.duration%60 ? s.duration%60 : ''}` : `${s.duration}min`) : '';
-      return `<div class="past-session">
+      const processed = s.processed ? '<span class="past-session-tag" style="background:rgba(167,139,250,0.15);color:var(--purple);">✓ calibré</span>' : '';
+      return `<div class="past-session" style="${s.processed ? 'opacity:0.5;' : ''}">
         <span class="past-session-date">${dateStr} ${timeStr}</span>
         <span class="past-session-spot">${s.spotName}</span>
         <span class="past-session-stars">${stars}</span>
         ${dur ? `<span class="past-session-tag">${dur}</span>` : ''}
+        ${processed}
         <div class="past-session-tags">
           ${(s.tags || []).map(t => `<span class="past-session-tag">${t}</span>`).join('')}
         </div>
       </div>`;
     }).join('')}
   `;
+
+  // Show export button only if there are unprocessed sessions
+  if (unprocessed.length > 0) {
+    exportSection.style.display = 'block';
+    exportHint.textContent = `${unprocessed.length} session${unprocessed.length > 1 ? 's' : ''} non traitée${unprocessed.length > 1 ? 's' : ''} — copie dans le presse-papier pour calibration`;
+  } else {
+    exportSection.style.display = 'block';
+    exportHint.textContent = 'Toutes les sessions ont été prises en compte ✓';
+    document.getElementById('fbExport').style.display = 'none';
+  }
+}
+
+function exportFeedback() {
+  const sessions = getFeedback();
+  const unprocessed = sessions.filter(s => !s.processed);
+  if (unprocessed.length === 0) return;
+
+  // Build clean export (remove internal fields)
+  const exported = unprocessed.map(s => ({
+    date: s.date,
+    spot: s.spotName,
+    board: s.boardName,
+    rating: s.rating,
+    duration: s.duration,
+    tags: s.tags,
+    notes: s.notes || ''
+  }));
+
+  const text = JSON.stringify(exported, null, 2);
+  function onExportSuccess() {
+    // Mark all as processed
+    const all = getFeedback();
+    all.forEach(s => { if (!s.processed) s.processed = true; });
+    localStorage.setItem(FEEDBACK_KEY, JSON.stringify(all));
+
+    const btn = document.getElementById('fbExport');
+    btn.textContent = `✓ ${unprocessed.length} session${unprocessed.length > 1 ? 's' : ''} copiée${unprocessed.length > 1 ? 's' : ''} !`;
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.textContent = '📋 Exporter pour calibration';
+      btn.disabled = false;
+      renderPastSessions();
+    }, 2000);
+  }
+
+  // Try clipboard API first, fallback to selectable textarea
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(onExportSuccess).catch(() => showExportFallback(text, onExportSuccess));
+  } else {
+    showExportFallback(text, onExportSuccess);
+  }
+}
+
+function showExportFallback(text, onSuccess) {
+  // Show a selectable textarea so user can "Select all + Copy" on mobile
+  const existing = document.getElementById('exportFallback');
+  if (existing) existing.remove();
+
+  const div = document.createElement('div');
+  div.id = 'exportFallback';
+  div.style.cssText = 'margin-top:0.5rem;';
+  div.innerHTML = `
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.3rem;">Sélectionne tout et copie :</div>
+    <textarea style="width:100%;height:120px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:0.5rem;font-size:0.65rem;font-family:monospace;resize:none;" readonly>${text}</textarea>
+    <button style="margin-top:0.4rem;width:100%;padding:0.5rem;border:none;border-radius:6px;background:var(--green);color:var(--bg);font-weight:600;font-family:inherit;cursor:pointer;">✓ C'est copié, marquer comme exporté</button>
+  `;
+  document.getElementById('exportSection').appendChild(div);
+
+  // Select text on tap
+  const ta = div.querySelector('textarea');
+  ta.addEventListener('focus', () => ta.select());
+
+  // Confirm button marks as processed
+  div.querySelector('button').addEventListener('click', () => {
+    onSuccess();
+    div.remove();
+  });
 }
 
 // ================================================================
