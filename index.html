@@ -1479,6 +1479,7 @@ function findBestSlot(spot, baseDate, fitness, fromH, toH) {
 
   // Score each 2-hour window within availability
   let bestScore = -1, bestStart = -1, bestEnd = -1, bestDetail = '';
+  let bestCond = null, bestResult = null, bestTidePhase = null, bestCoeff = null;
 
   for (let h = slotFrom; h <= slotTo - 2; h += 1) {
     const idx = dayStartIdx + h;
@@ -1495,6 +1496,10 @@ function findBestSlot(spot, baseDate, fitness, fromH, toH) {
       bestScore = result.score;
       bestStart = h;
       bestEnd = h + 2;
+      bestCond = cond;
+      bestResult = result;
+      bestTidePhase = tp;
+      bestCoeff = coeff;
       const waveH = cond.swellHeight || cond.waveHeight;
       bestDetail = `${waveH.toFixed(1)}m @ ${(cond.swellPeriod || cond.wavePeriod).toFixed(0)}s, vent ${cond.windSpeed.toFixed(0)}km/h`;
     }
@@ -1504,7 +1509,12 @@ function findBestSlot(spot, baseDate, fitness, fromH, toH) {
   return {
     label: `${bestStart}h — ${bestEnd}h`,
     detail: bestDetail,
-    score: bestScore
+    score: bestScore,
+    conditions: bestCond,
+    result: bestResult,
+    tidePhase: bestTidePhase,
+    tidalCoeff: bestCoeff,
+    startHour: bestStart
   };
 }
 
@@ -1594,37 +1604,41 @@ function renderAll() {
   let dayStartIdx = times.findIndex(t => t.startsWith(dayStr));
   if (dayStartIdx === -1) dayStartIdx = 0;
 
-  // Determine "current" hour index (clamped to availability window)
-  const currentHour = now.getHours();
-  const effStart = Math.floor(availStart);
-  const effEnd = Math.floor(availEnd);
-  const hourIdx = dayStartIdx + Math.max(effStart, Math.min(currentHour, effEnd)); // Clamp to availability
-
-  // Get conditions (average over 3h window centered on current)
-  const windowStart = Math.max(dayStartIdx, hourIdx - 1);
-  const conditions = getWindowAverage(marine, weather, windowStart, 3);
-
-  // Weather summary
-  const tempAvg = conditions.temp;
-  document.getElementById('weatherSummary').textContent =
-    `${weatherIcon(conditions.weatherCode)} ${tempAvg.toFixed(0)}°C • Vent ${conditions.windSpeed.toFixed(0)} km/h`;
-
   // Compute tide data for the day
   const dayDate = new Date(now);
   dayDate.setHours(0, 0, 0, 0);
   const tideData = getTideData(dayDate, 24, 10);
-  const tidePhase = getTidePhase(now, tideData);
-  const tidalCoeff = getTidalCoefficient(now);
 
-  // Score all spots
+  // Score all spots at their BEST hour within the availability window
   const results = SPOTS.map(spot => {
-    const result = computeSpotScore(spot, conditions, tidePhase, tidalCoeff, fitness);
-    return { spot, result };
+    const slot = findBestSlot(spot, now, fitness, availStart, availEnd);
+    if (slot && slot.result) {
+      return { spot, result: slot.result, conditions: slot.conditions, bestSlot: slot };
+    }
+    // No valid slot — spot is excluded for all hours in the window
+    // Try scoring at mid-window to get an exclusion reason
+    const midH = Math.floor((availStart + availEnd) / 2);
+    const midIdx = dayStartIdx + midH;
+    const cond = getWindowAverage(marine, weather, midIdx, 2);
+    const midDate = new Date(times[midIdx]);
+    const tp = getTidePhase(midDate, tideData);
+    const coeff = getTidalCoefficient(midDate);
+    const result = computeSpotScore(spot, cond, tp, coeff, fitness);
+    return { spot, result: { ...result, excluded: true, reason: result.reason || 'Aucun créneau valide' }, conditions: cond, bestSlot: null };
   });
 
   // Separate active vs excluded
   const active = results.filter(r => !r.result.excluded).sort((a, b) => b.result.score - a.result.score);
   const excluded = results.filter(r => r.result.excluded).map(r => ({ spot: r.spot, reason: r.result.reason }));
+
+  // Use best spot's conditions for weather summary, or mid-window fallback
+  const topConditions = active[0]?.conditions || (() => {
+    const midH = Math.floor((availStart + availEnd) / 2);
+    const midIdx = dayStartIdx + midH;
+    return getWindowAverage(marine, weather, midIdx, 2);
+  })();
+  document.getElementById('weatherSummary').textContent =
+    `${weatherIcon(topConditions.weatherCode)} ${topConditions.temp.toFixed(0)}°C • Vent ${topConditions.windSpeed.toFixed(0)} km/h`;
 
   // Render top-3 compact bar
   renderTop3Bar(active, now, fitness);
@@ -1644,7 +1658,7 @@ function renderAll() {
     </div>`;
   } else {
     top3.forEach((r, i) => {
-      html += renderSpotCard(r.spot, r.result, conditions, tideData, now, i, fitness);
+      html += renderSpotCard(r.spot, r.result, r.conditions, tideData, now, i, fitness);
     });
   }
   html += '</div>';
@@ -1677,7 +1691,7 @@ function renderTop3Bar(active, now, fitness) {
     const waveH = r.result.localWaveHeight || 0;
     const crowded = isCrowdedTime(now);
     const boards = recommendBoard(waveH, 10, 10, fitness, crowded);
-    const bestSlot = findBestSlot(spot, now, fitness, availStart, availEnd);
+    const bestSlot = r.bestSlot || findBestSlot(spot, now, fitness, availStart, availEnd);
     const timeLabel = bestSlot ? bestSlot.label.replace(' — ', '-') : '';
     const boardSize = boards[0]?.board.size || '?';
 
