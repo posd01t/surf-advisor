@@ -68,6 +68,77 @@ a { color: var(--blue); text-decoration: none; }
 .day-tab.active { background: var(--cyan); color: var(--bg); }
 .day-tab:not(.active):hover { background: var(--card-hover); color: var(--text); }
 
+/* ========== AVAILABILITY PANEL ========== */
+.avail-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--card); border-radius: var(--radius-sm);
+  padding: 0.45rem 0.75rem; margin-top: 0.5rem; cursor: pointer;
+  border: 1px solid var(--border); transition: border-color 0.2s;
+}
+.avail-toggle:hover { border-color: #2a3a55; }
+.avail-toggle-label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); }
+.avail-toggle-value { font-size: 0.75rem; font-weight: 700; color: var(--cyan); }
+.avail-toggle-arrow { font-size: 0.7rem; color: var(--text-muted); transition: transform 0.2s; }
+.avail-toggle.open .avail-toggle-arrow { transform: rotate(180deg); }
+
+.avail-panel {
+  max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out;
+  background: var(--card); border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  border: 1px solid var(--border); border-top: none;
+  margin-top: -1px;
+}
+.avail-panel.open { max-height: 220px; }
+.avail-inner { padding: 0.6rem 0.75rem 0.75rem; }
+
+.avail-presets { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.6rem; }
+.avail-preset {
+  font-size: 0.65rem; font-weight: 600; padding: 0.25rem 0.55rem;
+  border-radius: 20px; border: 1px solid var(--border);
+  background: none; color: var(--text-muted); cursor: pointer;
+  font-family: inherit; transition: all 0.15s;
+}
+.avail-preset:hover { border-color: #3a4a65; color: var(--text); }
+.avail-preset.active { background: rgba(34,211,238,0.15); color: var(--cyan); border-color: var(--cyan); }
+
+/* Dual range slider */
+.range-container { position: relative; height: 48px; margin-top: 0.3rem; }
+.range-track {
+  position: absolute; top: 18px; left: 0; right: 0; height: 6px;
+  background: var(--border); border-radius: 3px;
+}
+.range-fill {
+  position: absolute; top: 18px; height: 6px;
+  background: var(--cyan); border-radius: 3px; opacity: 0.6;
+}
+.range-marker {
+  position: absolute; top: 6px; transform: translateX(-50%);
+  font-size: 0.55rem; color: var(--amber); font-weight: 600;
+  text-align: center; line-height: 1;
+}
+.range-marker-line {
+  position: absolute; top: 17px; width: 1px; height: 10px;
+  background: var(--amber); opacity: 0.4; transform: translateX(-50%);
+}
+.range-labels {
+  position: absolute; top: 30px; left: 0; right: 0;
+  display: flex; justify-content: space-between;
+}
+.range-label { font-size: 0.55rem; color: #475569; }
+.range-thumb {
+  position: absolute; top: 12px; width: 20px; height: 20px;
+  background: var(--cyan); border: 2px solid var(--bg);
+  border-radius: 50%; cursor: grab; z-index: 2;
+  transform: translateX(-50%); touch-action: none;
+  box-shadow: 0 2px 6px rgba(34,211,238,0.3);
+  transition: box-shadow 0.15s;
+}
+.range-thumb:active { cursor: grabbing; box-shadow: 0 2px 10px rgba(34,211,238,0.5); }
+.range-time-tip {
+  position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
+  font-size: 0.6rem; font-weight: 700; color: var(--cyan);
+  white-space: nowrap; pointer-events: none;
+}
+
 /* ========== LOADING ========== */
 .loading {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -401,6 +472,36 @@ a { color: var(--blue); text-decoration: none; }
     <span class="fitness-value" id="fitnessValue">3 😐</span>
   </div>
   <div class="day-tabs" id="dayTabs"></div>
+
+  <!-- Availability time filter -->
+  <div class="avail-toggle" id="availToggle" onclick="toggleAvailPanel()">
+    <span class="avail-toggle-label">⏰ Dispo</span>
+    <span class="avail-toggle-value" id="availLabel">Toute la journée</span>
+    <span class="avail-toggle-arrow">▼</span>
+  </div>
+  <div class="avail-panel" id="availPanel">
+    <div class="avail-inner">
+      <div class="avail-presets" id="availPresets"></div>
+      <div class="range-container" id="rangeContainer">
+        <div class="range-track"></div>
+        <div class="range-fill" id="rangeFill"></div>
+        <div class="range-marker" id="sunriseMarker">🌅</div>
+        <div class="range-marker-line" id="sunriseMarkerLine"></div>
+        <div class="range-marker" id="sunsetMarker">🌇</div>
+        <div class="range-marker-line" id="sunsetMarkerLine"></div>
+        <div class="range-thumb" id="thumbStart"><span class="range-time-tip" id="tipStart">6h</span></div>
+        <div class="range-thumb" id="thumbEnd"><span class="range-time-tip" id="tipEnd">21h</span></div>
+        <div class="range-labels">
+          <span class="range-label">5h</span>
+          <span class="range-label">9h</span>
+          <span class="range-label">13h</span>
+          <span class="range-label">17h</span>
+          <span class="range-label">21h</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="top3-bar" id="top3Bar"></div>
 </div>
 
@@ -1103,8 +1204,8 @@ function renderSpotCard(spot, result, conditions, tideData, now, rank, fitness) 
   const boards = recommendBoard(waveH, conditions.swellPeriod || conditions.wavePeriod, conditions.windSpeed, fitness, crowded);
   const sc = scoreColor(result.score);
 
-  // Find best time slot for this spot today
-  const bestSlot = findBestSlot(spot, now, fitness);
+  // Find best time slot for this spot today (within availability window)
+  const bestSlot = findBestSlot(spot, now, fitness, availStart, availEnd);
 
   return `
     <div class="card">
@@ -1301,7 +1402,7 @@ function renderTimeline(marine, weather, dayStartIdx, tideData, spotName) {
 // ================================================================
 let _globalMarine = null, _globalWeather = null;
 
-function findBestSlot(spot, baseDate, fitness) {
+function findBestSlot(spot, baseDate, fitness, fromH, toH) {
   if (!_globalMarine || !_globalWeather) return null;
 
   const marine = _globalMarine;
@@ -1313,10 +1414,14 @@ function findBestSlot(spot, baseDate, fitness) {
   let dayStartIdx = times.findIndex(t => t.startsWith(dayStr));
   if (dayStartIdx === -1) return null;
 
-  // Score each 2-hour window from 6h to 20h
+  // Availability window (default 6-20)
+  const slotFrom = fromH != null ? Math.floor(fromH) : 6;
+  const slotTo = toH != null ? Math.floor(toH) : 20;
+
+  // Score each 2-hour window within availability
   let bestScore = -1, bestStart = -1, bestEnd = -1, bestDetail = '';
 
-  for (let h = 6; h <= 18; h += 1) {
+  for (let h = slotFrom; h <= slotTo - 2; h += 1) {
     const idx = dayStartIdx + h;
     if (idx + 2 > times.length) break;
 
@@ -1379,6 +1484,7 @@ function setupDayTabs() {
     currentDayOffset = parseInt(btn.dataset.day);
     container.querySelectorAll('.day-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    if (typeof updateSunMarkers === 'function') updateSunMarkers();
     renderAll();
   });
 }
@@ -1429,9 +1535,11 @@ function renderAll() {
   let dayStartIdx = times.findIndex(t => t.startsWith(dayStr));
   if (dayStartIdx === -1) dayStartIdx = 0;
 
-  // Determine "current" hour index
+  // Determine "current" hour index (clamped to availability window)
   const currentHour = now.getHours();
-  const hourIdx = dayStartIdx + Math.max(6, Math.min(currentHour, 20)); // Clamp to 6-20h
+  const effStart = Math.floor(availStart);
+  const effEnd = Math.floor(availEnd);
+  const hourIdx = dayStartIdx + Math.max(effStart, Math.min(currentHour, effEnd)); // Clamp to availability
 
   // Get conditions (average over 3h window centered on current)
   const windowStart = Math.max(dayStartIdx, hourIdx - 1);
@@ -1510,7 +1618,7 @@ function renderTop3Bar(active, now, fitness) {
     const waveH = r.result.localWaveHeight || 0;
     const crowded = isCrowdedTime(now);
     const boards = recommendBoard(waveH, 10, 10, fitness, crowded);
-    const bestSlot = findBestSlot(spot, now, fitness);
+    const bestSlot = findBestSlot(spot, now, fitness, availStart, availEnd);
     const timeLabel = bestSlot ? bestSlot.label.replace(' — ', '-') : '';
     const boardSize = boards[0]?.board.size || '?';
 
@@ -1766,10 +1874,180 @@ function renderPastSessions() {
 }
 
 // ================================================================
+// AVAILABILITY TIME FILTER
+// ================================================================
+const AVAIL_MIN_HOUR = 5, AVAIL_MAX_HOUR = 21;
+let availStart = 6, availEnd = 21; // default: toute la journée (6h-21h)
+let availActive = false; // panel open?
+
+const AVAIL_PRESETS = [
+  { label: 'Dawn patrol', icon: '🌅', start: 6, end: 9 },
+  { label: 'Matin', icon: '☀️', start: 8, end: 12 },
+  { label: 'Pause déj', icon: '🍔', start: 11.5, end: 14 },
+  { label: 'Après-midi', icon: '🏖️', start: 14, end: 18 },
+  { label: 'Après le taf', icon: '💼', start: 17, end: 20 },
+  { label: 'Journée', icon: '📅', start: 6, end: 21 },
+];
+
+// Sunrise/sunset calc (simplified solar position for Biarritz ~43.48°N)
+function calcSunTimes(date) {
+  const lat = 43.48 * Math.PI / 180;
+  const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000);
+  // Solar declination
+  const decl = -23.45 * Math.cos(2 * Math.PI / 365 * (dayOfYear + 10)) * Math.PI / 180;
+  // Hour angle at sunrise/sunset
+  const cosH = -Math.tan(lat) * Math.tan(decl);
+  const H = Math.acos(Math.max(-1, Math.min(1, cosH))) * 180 / Math.PI;
+  // Solar noon ~ 13h30 (UTC+1/+2 for France, simplified)
+  const isDST = date.getMonth() >= 2 && date.getMonth() <= 9; // rough DST March-Oct
+  const solarNoon = isDST ? 14.0 : 13.0; // solar noon in local time (France is ~UTC+1, noon ≈ 13h; DST ≈ 14h)
+  const sunrise = solarNoon - H / 15;
+  const sunset = solarNoon + H / 15;
+  return { sunrise: Math.round(sunrise * 10) / 10, sunset: Math.round(sunset * 10) / 10 };
+}
+
+function hourToLabel(h) {
+  const hh = Math.floor(h);
+  const mm = Math.round((h - hh) * 60);
+  return mm === 0 ? `${hh}h` : `${hh}h${mm.toString().padStart(2, '0')}`;
+}
+
+function toggleAvailPanel() {
+  const toggle = document.getElementById('availToggle');
+  const panel = document.getElementById('availPanel');
+  toggle.classList.toggle('open');
+  panel.classList.toggle('open');
+}
+
+function updateAvailUI() {
+  // Fill bar position
+  const range = AVAIL_MAX_HOUR - AVAIL_MIN_HOUR;
+  const startPct = ((availStart - AVAIL_MIN_HOUR) / range) * 100;
+  const endPct = ((availEnd - AVAIL_MIN_HOUR) / range) * 100;
+
+  document.getElementById('rangeFill').style.left = startPct + '%';
+  document.getElementById('rangeFill').style.width = (endPct - startPct) + '%';
+
+  // Thumbs
+  document.getElementById('thumbStart').style.left = startPct + '%';
+  document.getElementById('thumbEnd').style.left = endPct + '%';
+
+  // Tips
+  document.getElementById('tipStart').textContent = hourToLabel(availStart);
+  document.getElementById('tipEnd').textContent = hourToLabel(availEnd);
+
+  // Toggle label
+  const label = document.getElementById('availLabel');
+  if (availStart <= 6 && availEnd >= 20.5) {
+    label.textContent = 'Toute la journée';
+  } else {
+    label.textContent = `${hourToLabel(availStart)} → ${hourToLabel(availEnd)}`;
+  }
+
+  // Highlight matching preset
+  document.querySelectorAll('.avail-preset').forEach(btn => {
+    const s = parseFloat(btn.dataset.start), e = parseFloat(btn.dataset.end);
+    btn.classList.toggle('active', Math.abs(s - availStart) < 0.3 && Math.abs(e - availEnd) < 0.3);
+  });
+}
+
+function setupAvailability() {
+  // Build presets
+  const presetsEl = document.getElementById('availPresets');
+  presetsEl.innerHTML = AVAIL_PRESETS.map(p =>
+    `<button class="avail-preset" data-start="${p.start}" data-end="${p.end}">${p.icon} ${p.label}</button>`
+  ).join('');
+
+  presetsEl.addEventListener('click', e => {
+    const btn = e.target.closest('.avail-preset');
+    if (!btn) return;
+    availStart = parseFloat(btn.dataset.start);
+    availEnd = parseFloat(btn.dataset.end);
+    updateAvailUI();
+    renderAll();
+  });
+
+  // Sunrise/sunset markers
+  updateSunMarkers();
+
+  // Dual-thumb drag
+  setupThumbDrag('thumbStart', 'start');
+  setupThumbDrag('thumbEnd', 'end');
+
+  updateAvailUI();
+}
+
+function updateSunMarkers() {
+  const d = getDayDate(currentDayOffset);
+  const sun = calcSunTimes(d);
+  const range = AVAIL_MAX_HOUR - AVAIL_MIN_HOUR;
+
+  const sunrisePct = Math.max(0, Math.min(100, ((sun.sunrise - AVAIL_MIN_HOUR) / range) * 100));
+  const sunsetPct = Math.max(0, Math.min(100, ((sun.sunset - AVAIL_MIN_HOUR) / range) * 100));
+
+  document.getElementById('sunriseMarker').style.left = sunrisePct + '%';
+  document.getElementById('sunriseMarkerLine').style.left = sunrisePct + '%';
+  document.getElementById('sunsetMarker').style.left = sunsetPct + '%';
+  document.getElementById('sunsetMarkerLine').style.left = sunsetPct + '%';
+}
+
+function setupThumbDrag(thumbId, which) {
+  const thumb = document.getElementById(thumbId);
+  const container = document.getElementById('rangeContainer');
+
+  function getHourFromX(clientX) {
+    const rect = container.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const range = AVAIL_MAX_HOUR - AVAIL_MIN_HOUR;
+    // Snap to 0.5h increments
+    return Math.round((AVAIL_MIN_HOUR + pct * range) * 2) / 2;
+  }
+
+  function onMove(clientX) {
+    const h = getHourFromX(clientX);
+    if (which === 'start') {
+      availStart = Math.min(h, availEnd - 0.5);
+    } else {
+      availEnd = Math.max(h, availStart + 0.5);
+    }
+    updateAvailUI();
+  }
+
+  // Mouse events
+  thumb.addEventListener('mousedown', e => {
+    e.preventDefault();
+    const moveHandler = ev => onMove(ev.clientX);
+    const upHandler = () => {
+      document.removeEventListener('mousemove', moveHandler);
+      document.removeEventListener('mouseup', upHandler);
+      renderAll(); // re-render on release
+    };
+    document.addEventListener('mousemove', moveHandler);
+    document.addEventListener('mouseup', upHandler);
+  });
+
+  // Touch events
+  thumb.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const moveHandler = ev => {
+      if (ev.touches.length) onMove(ev.touches[0].clientX);
+    };
+    const endHandler = () => {
+      document.removeEventListener('touchmove', moveHandler);
+      document.removeEventListener('touchend', endHandler);
+      renderAll();
+    };
+    document.addEventListener('touchmove', moveHandler, { passive: false });
+    document.addEventListener('touchend', endHandler);
+  });
+}
+
+// ================================================================
 // INIT
 // ================================================================
 setupDayTabs();
 setupFitnessSlider();
+setupAvailability();
 setupFeedbackModal();
 loadData();
 
