@@ -705,11 +705,12 @@ const FITNESS_EMOJIS = { 1: '😴', 2: '😑', 3: '😐', 4: '💪', 5: '🔥' }
 // Constituants principaux : amplitude (m) et phase (deg)
 // Reference: SHOM public tidal data for Biarritz
 // ================================================================
+// Phases calibrated against SHOM/maree.info predictions for Biarritz (avg error ~9min / 9cm)
 const TIDE_CONSTITUENTS = [
-  { name: 'M2', speed: 28.9841042, amp: 1.24, phase: 72 },
-  { name: 'S2', speed: 30.0, amp: 0.44, phase: 108 },
-  { name: 'N2', speed: 28.4397295, amp: 0.26, phase: 55 },
-  { name: 'K2', speed: 30.0821373, amp: 0.12, phase: 105 },
+  { name: 'M2', speed: 28.9841042, amp: 1.24, phase: 97 },
+  { name: 'S2', speed: 30.0, amp: 0.44, phase: 133 },
+  { name: 'N2', speed: 28.4397295, amp: 0.26, phase: 80 },
+  { name: 'K2', speed: 30.0821373, amp: 0.12, phase: 130 },
   { name: 'K1', speed: 15.0410686, amp: 0.065, phase: 55 },
   { name: 'O1', speed: 13.9430356, amp: 0.055, phase: 330 },
   { name: 'P1', speed: 14.9589314, amp: 0.022, phase: 52 },
@@ -717,15 +718,47 @@ const TIDE_CONSTITUENTS = [
   { name: 'M4', speed: 57.9682084, amp: 0.03, phase: 200 },
   { name: 'MS4', speed: 58.9841042, amp: 0.015, phase: 240 },
 ];
-const TIDE_DATUM = 2.31; // mean sea level offset (m above chart datum)
+const TIDE_DATUM = 2.53; // mean sea level offset (m above chart datum, Biarritz)
+
+// Astronomical mean longitudes (degrees) at date, per Meeus/Schureman approximations
+function getAstroArgs(date) {
+  const mod360 = x => ((x % 360) + 360) % 360;
+  const JD = date.getTime() / 86400000 + 2440587.5;
+  const T = (JD - 2451545.0) / 36525;            // Julian centuries since J2000
+  const s  = mod360(218.3164477 + 481267.88123421 * T - 0.0015786 * T*T);  // Moon longitude
+  const h  = mod360(280.4664567 + 36000.76982779 * T + 0.0003032 * T*T);   // Sun longitude
+  const p  = mod360(83.3532465  + 4069.0137287 * T   - 0.0103200 * T*T);   // Moon perigee
+  const N  = mod360(125.04455501 - 1934.13626197 * T + 0.0020708 * T*T);   // Ascending node
+  const p1 = mod360(282.9384 + 1.7192 * T);                                 // Sun perigee
+  // Mean lunar time at Greenwich (degrees) — Doodson's tau
+  const utH = date.getUTCHours() + date.getUTCMinutes()/60 + date.getUTCSeconds()/3600;
+  const tau = mod360(15 * utH + 180 - s + h);
+  return { tau, s, h, p, N, p1 };
+}
+
+// Astronomical argument V0(t) for each constituent, degrees
+function constituentV0(name, a) {
+  switch (name) {
+    case 'M2':  return 2*a.tau;
+    case 'S2':  return 2*a.tau + 2*a.s - 2*a.h;
+    case 'N2':  return 2*a.tau - a.s + a.p;
+    case 'K2':  return 2*a.tau + 2*a.s;
+    case 'K1':  return a.tau + a.s - 90;
+    case 'O1':  return a.tau - a.s + 90;
+    case 'P1':  return a.tau + a.s - 2*a.h - 90;
+    case 'Q1':  return a.tau - 2*a.s + a.p + 90;
+    case 'M4':  return 4*a.tau;
+    case 'MS4': return 4*a.tau + 2*a.s - 2*a.h;
+    default: return 0;
+  }
+}
 
 function getTideHeight(date) {
-  // Hours since epoch in UT
-  const hours = date.getTime() / 3600000;
+  const a = getAstroArgs(date);
   let h = TIDE_DATUM;
   for (const c of TIDE_CONSTITUENTS) {
-    const omega = c.speed * Math.PI / 180; // deg/hr to rad/hr
-    h += c.amp * Math.cos(omega * hours - c.phase * Math.PI / 180);
+    const V = constituentV0(c.name, a);
+    h += c.amp * Math.cos((V - c.phase) * Math.PI / 180);
   }
   return h;
 }
@@ -1728,7 +1761,7 @@ function renderTop3Bar(active, now, fitness) {
 // ================================================================
 const FEEDBACK_KEY = 'olapierre_feedback';
 const TAG_CATEGORIES = [
-  { name: '🌊 Vagues', tags: ['Vagues parfaites', 'Trop gros', 'Trop petit', 'Vagues fermées', 'Glassy', 'Vent onshore', 'Courant fort'] },
+  { name: '🌊 Vagues', tags: ['Vagues parfaites', 'Trop gros', 'Trop petit', 'Vagues fermées', 'Pas calé', 'Glassy', 'Vent onshore', 'Courant fort'] },
   { name: '🏄 Session', tags: ['En pleine forme', 'Fatigue', 'Surf combat', 'Difficulté à passer la barre', 'Galéré au takeoff', 'Bonnes séries régulières', 'Longue attente entre séries'] },
   { name: '📍 Spot & confort', tags: ['Crowdé', 'Personne à l\'eau', 'Eau froide', 'Eau chaude', 'Mal équipé (combi)', 'Spot en travaux / dégradé'] },
   { name: '🎯 Prévision app', tags: ['Prévision spot OK', 'Prévision spot fausse', 'Bonne reco planche', 'Mauvaise reco planche', 'Décalage horaire marée'] },
