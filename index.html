@@ -191,6 +191,14 @@ a { color: var(--blue); text-decoration: none; }
 .nowater-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem; color: var(--text); margin: 0; }
 .nowater-label input { width: 18px; height: 18px; cursor: pointer; }
 .nowater-mode .nowater-hide { display: none !important; }
+.confidence-banner { display: flex; gap: 0.6rem; align-items: center; padding: 0.7rem 1rem; margin: 0 1rem 1rem; border-radius: 10px; font-size: 0.85rem; line-height: 1.35; border: 1px solid; }
+.confidence-icon { font-size: 1.2rem; flex-shrink: 0; }
+.confidence-msg { color: var(--text); }
+.banner-good { background: rgba(46,213,115,0.10); border-color: rgba(46,213,115,0.35); }
+.banner-mixed { background: rgba(86,204,242,0.08); border-color: rgba(86,204,242,0.28); }
+.banner-warn { background: rgba(255,159,67,0.10); border-color: rgba(255,159,67,0.4); }
+.banner-bad { background: rgba(255,71,87,0.10); border-color: rgba(255,71,87,0.45); }
+@media (min-width:560px) { .confidence-banner { max-width: 560px; margin-left: auto; margin-right: auto; } }
 
 /* Conditions grid */
 .cond-grid {
@@ -630,7 +638,8 @@ const SPOTS = [
     bestTide: 'mid-rising',
     tideExclusion: { type: 'very-low-big-coeff', reason: 'Rochers affleurants à marée très basse (gros coefficients)' },
     swellRange: [0.4, 2.0],
-    cam: 'https://www.viewsurf.com/spot/uhabia-bidart'
+    windProtection: 0.05, // plage très ouverte
+    cam: 'https://www.quiksilver.fr/surf-webcams/guethary.html'
   },
   {
     id: 'ilbarritz', name: 'Ilbarritz', lat: 43.441, lon: -1.572,
@@ -641,7 +650,8 @@ const SPOTS = [
     bestTide: 'mid',
     tideExclusion: { type: 'very-low-big-coeff', reason: 'Rochers affleurants à marée très basse (gros coefficients)' },
     swellRange: [0.4, 1.8],
-    cam: 'https://www.viewsurf.com/spot/ilbarritz'
+    windProtection: 0.10, // protégé un peu par Ilbarritz hill côté sud
+    cam: 'https://www.quiksilver.fr/surf-webcams/biarritz-la-grande-plage.html'
   },
   {
     id: 'bidart', name: 'Bidart Centre', lat: 43.437, lon: -1.584,
@@ -652,7 +662,8 @@ const SPOTS = [
     bestTide: 'mid-to-high',
     tideExclusion: { type: 'very-high-big-swell', reason: 'Dalles rocheuses sud, projection contre front de mer si grosse houle' },
     swellRange: [0.4, 1.8],
-    cam: 'https://www.viewsurf.com/spot/bidart-centre'
+    windProtection: 0.05, // dalles ouvertes, peu protégé
+    cam: 'https://www.quiksilver.fr/surf-webcams/guethary.html'
   },
   {
     id: 'cotebasques', name: 'Côte des Basques', lat: 43.474, lon: -1.571,
@@ -663,7 +674,8 @@ const SPOTS = [
     bestTide: 'low-to-mid',
     tideExclusion: { type: 'high-tide', reason: 'Plage disparaît, vagues sur rochers/remblais — DANGER' },
     swellRange: [0.5, 2.0],
-    cam: 'https://www.viewsurf.com/spot/biarritz-cote-des-basques'
+    windProtection: 0.20, // falaise sud protège vents S/SW
+    cam: 'https://www.quiksilver.fr/surf-webcams/biarritz-cote-des-basques.html'
   },
   {
     id: 'marinella', name: 'Marinella', lat: 43.498, lon: -1.535,
@@ -674,7 +686,8 @@ const SPOTS = [
     bestTide: 'mid',
     tideExclusion: { type: 'very-high', reason: 'Blocage contre rochers/digues à marée très haute' },
     swellRange: [0.4, 1.8],
-    cam: 'https://www.viewsurf.com/spot/saint-jean-de-luz-erromardie'
+    windProtection: 0.25, // baie SJL protège du SW
+    cam: 'https://www.quiksilver.fr/surf-webcams/saint-jean-de-luz.html'
   },
   {
     id: 'madrague', name: 'La Madrague', lat: 43.504, lon: -1.530,
@@ -685,7 +698,8 @@ const SPOTS = [
     bestTide: 'low-to-mid',
     tideExclusion: { type: 'high-big-coeff', reason: 'Ne fonctionne plus, vagues ferment à marée haute' },
     swellRange: [0.5, 2.0],
-    cam: 'https://www.viewsurf.com/spot/saint-jean-de-luz-lafitenia'
+    windProtection: 0.15, // pointe rocheuse abrite un peu
+    cam: 'https://www.quiksilver.fr/surf-webcams/saint-jean-de-luz.html'
   },
   {
     id: 'cenitz', name: 'Cenitz', lat: 43.418, lon: -1.594,
@@ -696,7 +710,8 @@ const SPOTS = [
     bestTide: 'high-only',
     tideExclusion: { type: 'low-to-mid', reason: 'Rochers dangereux à marée basse/mi-basse, surtout côté nord' },
     swellRange: [0.3, 1.2],
-    cam: 'https://www.viewsurf.com/spot/cenitz'
+    windProtection: 0.25, // reef au pied de falaise protège vents S
+    cam: 'https://www.quiksilver.fr/surf-webcams/guethary.html'
   },
   {
     id: 'hendaye', name: 'Hendaye', lat: 43.370, lon: -1.756,
@@ -707,7 +722,8 @@ const SPOTS = [
     bestTide: 'all',
     tideExclusion: null,
     swellRange: [0.5, 2.5],
-    cam: 'https://www.viewsurf.com/spot/hendaye-plage'
+    windProtection: 0.55, // baie de Txingudi très protégée vents W/NW/SW
+    cam: 'https://www.quiksilver.fr/surf-webcams/hendaye.html'
   }
 ];
 
@@ -1021,19 +1037,24 @@ function scorePeriod(period) {
   return 0;
 }
 
-function scoreWind(speed, gustSpeed, windDir, offshoreRange) {
+function scoreWind(speed, gustSpeed, windDir, offshoreRange, windProtection = 0) {
   const isOffshore = isInRange(windDir, offshoreRange);
   const isCrossOff = angleDiff(windDir, (offshoreRange[0] + offshoreRange[1]) / 2) < 60;
 
-  // Exclusion
-  if (gustSpeed > 40) return -1; // excluded
+  // Protection terrain: réduit vent ressenti (only when not offshore, since offshore is already great)
+  const protFactor = isOffshore ? 0 : windProtection;
+  const effSpeed = speed * (1 - protFactor * 0.6);
+  const effGusts = gustSpeed * (1 - protFactor * 0.6);
+
+  // Exclusion (sur rafales effectives)
+  if (effGusts > 40) return -1;
 
   let score;
-  if (speed < 10) {
+  if (effSpeed < 10) {
     score = 18; // glassy
-  } else if (speed < 20) {
+  } else if (effSpeed < 20) {
     score = isOffshore ? 20 : isCrossOff ? 14 : 8;
-  } else if (speed < 30) {
+  } else if (effSpeed < 30) {
     score = isOffshore ? 10 : isCrossOff ? 5 : 2;
   } else {
     score = 0; // warning
@@ -1085,9 +1106,9 @@ function scoreSwellDirection(swellDir, bestRange) {
 }
 
 function scoreDistance(driveMin) {
-  // 10 pts max, continuous scale from GPS-calculated drive times
-  // Uhabia=18min → 10pts, Hendaye=41min → 2pts
-  return Math.max(1, Math.round(10 - (driveMin - 18) * (8 / 23)));
+  // 6 pts max (tiebreaker, ne devrait pas inverser des conditions différentes)
+  // Uhabia=18min → 6pts, Hendaye=41min → 1pt
+  return Math.max(1, Math.round(6 - (driveMin - 18) * (5 / 23)));
 }
 
 function computeSpotScore(spot, conditions, tidePhase, tidalCoeff, fitness) {
@@ -1098,8 +1119,8 @@ function computeSpotScore(spot, conditions, tidePhase, tidalCoeff, fitness) {
   const exclusionReason = isSpotExcluded(spot, tidePhase, tidalCoeff, waveH);
   if (exclusionReason) return { score: -1, excluded: true, reason: exclusionReason };
 
-  // Wind exclusion
-  const windScore = scoreWind(conditions.windSpeed, conditions.windGusts, conditions.windDir, spot.offshoreDir);
+  // Wind exclusion (avec protection terrain par spot)
+  const windScore = scoreWind(conditions.windSpeed, conditions.windGusts || conditions.gusts, conditions.windDir, spot.offshoreDir, spot.windProtection || 0);
   if (windScore === -1) return { score: -1, excluded: true, reason: 'Rafales > 40 km/h — dangereux' };
 
   // Fitness adjustments
@@ -1116,17 +1137,32 @@ function computeSpotScore(spot, conditions, tidePhase, tidalCoeff, fitness) {
   if (spot.difficulty >= excludeDifficulty) return { score: -1, excluded: true, reason: `Spot trop engagé pour ta forme (${fitness}/5)` };
 
   const waveSc = scoreWaveSize(waveH);
-  const periodSc = scorePeriod(conditions.swellPeriod || conditions.wavePeriod);
+  const period = conditions.swellPeriod || conditions.wavePeriod;
+  const periodSc = scorePeriod(period);
   const tideSc = scoreTideAlignment(spot, tidePhase);
   const dirSc = scoreSwellDirection(conditions.swellDir || conditions.waveDir, spot.bestSwellDir);
   const distSc = scoreDistance(spot.driveMin);
 
+  // Steepness H/Per sur swell brut (open-ocean, ce qui détermine la régularité de la houle au large)
+  // Ex: 2.1m/9s = 0.23 (limite), 2.5m/8s = 0.31 (bazar), 1m/10s = 0.10 (clean)
+  const steepness = period > 0 ? rawSwell / period : 0;
+  let steepnessPenalty = 0;
+  if (steepness > 0.28) steepnessPenalty = -12;
+  else if (steepness > 0.23) steepnessPenalty = -7;
+  else if (steepness > 0.20) steepnessPenalty = -3;
+
   // Fitness bonus/malus on wave score
   let fitnessAdj = 0;
   if (fitness >= 4 && waveH > 1.2) fitnessAdj = 3;
-  if (fitness <= 2) fitnessAdj = distSc > 6 ? 2 : -2; // favor close spots
+  if (fitness <= 2) fitnessAdj = distSc > 4 ? 2 : -2; // favor close spots
 
-  const total = waveSc + periodSc + windScore + tideSc + dirSc + distSc + fitnessAdj;
+  // Distance dynamiquement pondérée : tiebreaker seulement quand les conditions sont bonnes,
+  // et n'inverse pas un meilleur spot si conditions moyennes
+  const conditionsScore = waveSc + periodSc + windScore + tideSc + dirSc + steepnessPenalty + fitnessAdj;
+  const distWeight = conditionsScore >= 65 ? 1.0 : conditionsScore >= 50 ? 0.5 : 0.2;
+  const effDistSc = Math.round(distSc * distWeight);
+
+  const total = conditionsScore + effDistSc;
   const score = Math.max(0, Math.min(100, total));
 
   const tags = [];
@@ -1143,8 +1179,10 @@ function computeSpotScore(spot, conditions, tidePhase, tidalCoeff, fitness) {
   if (waveH > 1.5 && fitness < 4) warnings.push('Grosse houle, sois prudent');
   if (waveH > 1.2 && fitness <= 2) warnings.push('Forme nécessaire ≥ 3');
   if (waveH < 0.4) warnings.push('Très petit, peu de vagues');
+  if (steepness > 0.28) warnings.push('Mer désorganisée (vagues courtes/hautes)');
+  else if (steepness > 0.23) warnings.push('Risque mer peu calée');
 
-  return { score, excluded: false, waveSc, periodSc, windScore, tideSc, dirSc, distSc, tags, warnings, localWaveHeight };
+  return { score, excluded: false, waveSc, periodSc, windScore, tideSc, dirSc, distSc, effDistSc, steepnessPenalty, tags, warnings, localWaveHeight };
 }
 
 // ================================================================
@@ -1707,7 +1745,9 @@ function renderAll() {
   const top3 = active.slice(0, 3);
   const topSpotName = top3[0]?.spot.name || '';
 
-  let html = '<div class="cards">';
+  let html = '';
+  html += renderConfidenceBanner(top3);
+  html += '<div class="cards">';
   if (top3.length === 0) {
     html += `<div class="card" style="padding:2rem;text-align:center;">
       <div style="font-size:2rem;margin-bottom:0.5rem;">😬</div>
@@ -1730,6 +1770,36 @@ function renderAll() {
   html += renderExcludedSpots(excluded);
 
   document.getElementById('content').innerHTML = html;
+}
+
+// ================================================================
+// CONFIDENCE BANNER — go/no-go visuel au-dessus des cards
+// ================================================================
+function renderConfidenceBanner(top3) {
+  if (top3.length === 0) return '';
+  const s1 = top3[0].result.score;
+  const s2 = top3[1]?.result.score ?? 0;
+  const gap = s1 - s2;
+  let level, icon, msg;
+  if (s1 < 50) {
+    level = 'bad'; icon = '🚫';
+    msg = `Conditions médiocres partout (max ${s1}/100) — repos conseillé ou attends mieux.`;
+  } else if (s1 < 65) {
+    level = 'warn'; icon = '⚠';
+    msg = `Conditions mitigées (max ${s1}/100). Check une 📹 cam avant de partir.`;
+  } else if (s1 >= 70 && gap >= 8) {
+    level = 'good'; icon = '✨';
+    msg = `<strong>${top3[0].spot.name}</strong> nettement devant (+${gap}pts). Le choix est clair.`;
+  } else if (gap < 6) {
+    level = 'mixed'; icon = '🤔';
+    msg = `Top 3 serrés (écart ${gap}pts). Check une 📹 cam pour départager.`;
+  } else {
+    return ''; // cas neutre : score décent, gap moyen → pas de banner
+  }
+  return `<div class="confidence-banner banner-${level}">
+    <span class="confidence-icon">${icon}</span>
+    <span class="confidence-msg">${msg}</span>
+  </div>`;
 }
 
 // ================================================================
@@ -1790,7 +1860,7 @@ const FEEDBACK_KEY = 'olapierre_feedback';
 const TAG_CATEGORIES = [
   { name: '🌊 Vagues', tags: ['Vagues parfaites', 'Trop gros', 'Trop petit', 'Vagues fermées', 'Pas calé', 'Glassy', 'Vent onshore', 'Courant fort'] },
   { name: '🏄 Session', tags: ['En pleine forme', 'Fatigue', 'Surf combat', 'Difficulté à passer la barre', 'Galéré au takeoff', 'Bonnes séries régulières', 'Longue attente entre séries'] },
-  { name: '📍 Spot & confort', tags: ['Crowdé', 'Personne à l\'eau', 'Eau froide', 'Eau chaude', 'Mal équipé (combi)', 'Spot en travaux / dégradé'] },
+  { name: '📍 Spot & confort', tags: ['Crowdé', 'Personne à l\'eau', 'Personne à l\'eau (avant — signal rouge)', 'Eau froide', 'Eau chaude', 'Mal équipé (combi)', 'Spot en travaux / dégradé'] },
   { name: '🎯 Prévision app', tags: ['Prévision spot OK', 'Prévision spot fausse', 'Bonne reco planche', 'Mauvaise reco planche', 'Décalage horaire marée'] },
 ];
 // Flat list for backward compat
