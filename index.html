@@ -185,6 +185,12 @@ a { color: var(--blue); text-decoration: none; }
   font-size: 0.75rem; color: var(--text-muted);
 }
 .spot-meta-item { display: flex; align-items: center; gap: 0.25rem; }
+.spot-cam-link { color: var(--accent); text-decoration: none; padding: 2px 8px; border-radius: 12px; background: rgba(86,204,242,0.12); font-weight: 600; }
+.spot-cam-link:hover { background: rgba(86,204,242,0.25); }
+.nowater-toggle { background: rgba(255,159,67,0.08); border: 1px solid rgba(255,159,67,0.25); border-radius: 8px; padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; }
+.nowater-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem; color: var(--text); margin: 0; }
+.nowater-label input { width: 18px; height: 18px; cursor: pointer; }
+.nowater-mode .nowater-hide { display: none !important; }
 
 /* Conditions grid */
 .cond-grid {
@@ -541,6 +547,13 @@ a { color: var(--blue); text-decoration: none; }
   <div class="modal" id="feedbackModal">
     <div class="modal-title">Feedback de session</div>
 
+    <div class="form-group nowater-toggle">
+      <label class="nowater-label">
+        <input type="checkbox" id="fbNoWater">
+        <span>🚫 Pas allé à l'eau (j'ai vu, ça n'allait pas)</span>
+      </label>
+    </div>
+
     <div class="form-group">
       <label class="form-label">Quand ?</label>
       <div class="quick-picks" id="fbDatePicks"></div>
@@ -556,7 +569,7 @@ a { color: var(--blue); text-decoration: none; }
         </select>
         <input type="text" class="form-input form-hidden" id="fbSpotOther" placeholder="Nom du spot..." style="margin-top:0.3rem;">
       </div>
-      <div class="form-group">
+      <div class="form-group nowater-hide">
         <label class="form-label">Planche</label>
         <select class="form-select" id="fbBoard">
           <option value="">Choisis...</option>
@@ -564,12 +577,12 @@ a { color: var(--blue); text-decoration: none; }
       </div>
     </div>
 
-    <div class="form-group" style="margin-top:1rem;">
+    <div class="form-group nowater-hide" style="margin-top:1rem;">
       <label class="form-label">Durée</label>
       <div class="quick-picks" id="fbDurationPicks"></div>
     </div>
 
-    <div class="form-group">
+    <div class="form-group nowater-hide">
       <label class="form-label">Note de la session</label>
       <div class="star-rating" id="fbStars">
         <input type="radio" name="rating" id="star5" value="5"><label for="star5">★</label>
@@ -616,7 +629,8 @@ const SPOTS = [
     offshoreDir: [120, 200],
     bestTide: 'mid-rising',
     tideExclusion: { type: 'very-low-big-coeff', reason: 'Rochers affleurants à marée très basse (gros coefficients)' },
-    swellRange: [0.4, 2.0]
+    swellRange: [0.4, 2.0],
+    cam: 'https://www.viewsurf.com/spot/uhabia-bidart'
   },
   {
     id: 'ilbarritz', name: 'Ilbarritz', lat: 43.441, lon: -1.572,
@@ -626,7 +640,8 @@ const SPOTS = [
     offshoreDir: [120, 200],
     bestTide: 'mid',
     tideExclusion: { type: 'very-low-big-coeff', reason: 'Rochers affleurants à marée très basse (gros coefficients)' },
-    swellRange: [0.4, 1.8]
+    swellRange: [0.4, 1.8],
+    cam: 'https://www.viewsurf.com/spot/ilbarritz'
   },
   {
     id: 'bidart', name: 'Bidart Centre', lat: 43.437, lon: -1.584,
@@ -636,7 +651,8 @@ const SPOTS = [
     offshoreDir: [120, 180],
     bestTide: 'mid-to-high',
     tideExclusion: { type: 'very-high-big-swell', reason: 'Dalles rocheuses sud, projection contre front de mer si grosse houle' },
-    swellRange: [0.4, 1.8]
+    swellRange: [0.4, 1.8],
+    cam: 'https://www.viewsurf.com/spot/bidart-centre'
   },
   {
     id: 'cotebasques', name: 'Côte des Basques', lat: 43.474, lon: -1.571,
@@ -646,7 +662,8 @@ const SPOTS = [
     offshoreDir: [120, 200],
     bestTide: 'low-to-mid',
     tideExclusion: { type: 'high-tide', reason: 'Plage disparaît, vagues sur rochers/remblais — DANGER' },
-    swellRange: [0.5, 2.0]
+    swellRange: [0.5, 2.0],
+    cam: 'https://www.viewsurf.com/spot/biarritz-cote-des-basques'
   },
   {
     id: 'marinella', name: 'Marinella', lat: 43.498, lon: -1.535,
@@ -656,7 +673,8 @@ const SPOTS = [
     offshoreDir: [100, 180],
     bestTide: 'mid',
     tideExclusion: { type: 'very-high', reason: 'Blocage contre rochers/digues à marée très haute' },
-    swellRange: [0.4, 1.8]
+    swellRange: [0.4, 1.8],
+    cam: 'https://www.viewsurf.com/spot/saint-jean-de-luz-erromardie'
   },
   {
     id: 'madrague', name: 'La Madrague', lat: 43.504, lon: -1.530,
@@ -666,7 +684,8 @@ const SPOTS = [
     offshoreDir: [100, 180],
     bestTide: 'low-to-mid',
     tideExclusion: { type: 'high-big-coeff', reason: 'Ne fonctionne plus, vagues ferment à marée haute' },
-    swellRange: [0.5, 2.0]
+    swellRange: [0.5, 2.0],
+    cam: 'https://www.viewsurf.com/spot/saint-jean-de-luz-lafitenia'
   },
   {
     id: 'cenitz', name: 'Cenitz', lat: 43.418, lon: -1.594,
@@ -676,7 +695,8 @@ const SPOTS = [
     offshoreDir: [120, 180],
     bestTide: 'high-only',
     tideExclusion: { type: 'low-to-mid', reason: 'Rochers dangereux à marée basse/mi-basse, surtout côté nord' },
-    swellRange: [0.3, 1.2]
+    swellRange: [0.3, 1.2],
+    cam: 'https://www.viewsurf.com/spot/cenitz'
   },
   {
     id: 'hendaye', name: 'Hendaye', lat: 43.370, lon: -1.756,
@@ -686,9 +706,15 @@ const SPOTS = [
     offshoreDir: [140, 210],
     bestTide: 'all',
     tideExclusion: null,
-    swellRange: [0.5, 2.5]
+    swellRange: [0.5, 2.5],
+    cam: 'https://www.viewsurf.com/spot/hendaye-plage'
   }
 ];
+
+// Webcam URL helper: returns the configured cam or fallback Google search
+function getCamUrl(spot) {
+  return spot.cam || `https://www.google.com/search?q=webcam+surf+${encodeURIComponent(spot.name)}+live`;
+}
 
 const BOARDS = [
   { id: 'hybride64', name: 'Hybride 6\'4', size: '6\'4', volume: 40, waveRange: [0.6, 1.5], stability: 3, maneuver: 4.5, crowdSafe: false, icon: '🏄' },
@@ -1312,6 +1338,7 @@ function renderSpotCard(spot, result, conditions, tideData, now, rank, fitness) 
         ${conditions.waterTemp != null ? `<span class="spot-meta-item">🌊 ${conditions.waterTemp.toFixed(0)}°C</span>` : ''}
         ${(() => { const ws = recommendWetsuit(conditions.waterTemp); return ws ? `<span class="spot-meta-item">${ws.icon} ${ws.label}</span>` : ''; })()}
         ${crowded ? '<span class="spot-meta-item">👥 Affluence</span>' : ''}
+        <a class="spot-meta-item spot-cam-link" href="${getCamUrl(spot)}" target="_blank" rel="noopener" title="Voir la webcam">📹 Cam</a>
       </div>
       <div class="cond-grid">
         <div class="cond-cell">
@@ -1935,6 +1962,13 @@ function setupFeedbackModal() {
   document.querySelector('.tag-cat-header[data-cat="0"]').classList.add('open');
   document.querySelector('[data-catbody="0"]').classList.add('open');
 
+  // --- No-water toggle ---
+  const noWaterCb = document.getElementById('fbNoWater');
+  noWaterCb.addEventListener('change', () => {
+    modal.classList.toggle('nowater-mode', noWaterCb.checked);
+    submitBtn.textContent = noWaterCb.checked ? 'Enregistrer (pas à l\'eau)' : 'Enregistrer le feedback';
+  });
+
   // --- Open/close ---
   fab.addEventListener('click', () => {
     buildDatePicks(); // Refresh date suggestions on open
@@ -1947,9 +1981,10 @@ function setupFeedbackModal() {
 
   // --- Submit ---
   submitBtn.addEventListener('click', () => {
+    const noWater = noWaterCb.checked;
     const spot = spotSelect.value;
-    const board = boardSelect.value;
-    const rating = document.querySelector('#fbStars input:checked')?.value || 3;
+    const board = noWater ? '' : boardSelect.value;
+    const rating = noWater ? null : parseInt(document.querySelector('#fbStars input:checked')?.value || 3);
     const tags = [...tagsContainer.querySelectorAll('.context-tag-input:checked')].map(cb => cb.value);
     const notes = document.getElementById('fbNotes').value;
     const date = dateInput.value;
@@ -1962,8 +1997,9 @@ function setupFeedbackModal() {
     const spotName = isOther ? spotOtherInput.value.trim() : (SPOTS.find(s => s.id === spot)?.name || spot);
 
     const entry = {
-      date, spot: spotId, board, rating: parseInt(rating), tags, notes,
-      duration: selectedDuration,
+      date, spot: spotId, board, rating, tags, notes,
+      duration: noWater ? 0 : selectedDuration,
+      noWater,
       spotName,
       boardName: BOARDS.find(b => b.id === board)?.name || board,
       timestamp: Date.now()
@@ -1982,6 +2018,8 @@ function setupFeedbackModal() {
     durationPicks.querySelectorAll('.quick-pick').forEach(b => b.classList.remove('active'));
     durationPicks.querySelector('[data-dur="60"]').classList.add('active');
     selectedDuration = 60;
+    noWaterCb.checked = false;
+    modal.classList.remove('nowater-mode');
 
     renderPastSessions();
 
@@ -2014,14 +2052,16 @@ function renderPastSessions() {
       const d = new Date(s.date);
       const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
       const timeStr = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const stars = '★'.repeat(s.rating) + '☆'.repeat(5 - s.rating);
+      const stars = s.noWater ? '' : ('★'.repeat(s.rating || 0) + '☆'.repeat(5 - (s.rating || 0)));
       const dur = s.duration ? (s.duration >= 60 ? `${Math.floor(s.duration/60)}h${s.duration%60 ? s.duration%60 : ''}` : `${s.duration}min`) : '';
       const processed = s.processed ? '<span class="past-session-tag" style="background:rgba(167,139,250,0.15);color:var(--purple);">✓ calibré</span>' : '';
+      const noWaterBadge = s.noWater ? '<span class="past-session-tag" style="background:rgba(255,159,67,0.15);color:#ff9f43;">🚫 pas à l\'eau</span>' : '';
       return `<div class="past-session" style="${s.processed ? 'opacity:0.5;' : ''}">
         <span class="past-session-date">${dateStr} ${timeStr}</span>
         <span class="past-session-spot">${s.spotName}</span>
         <span class="past-session-stars">${stars}</span>
-        ${dur ? `<span class="past-session-tag">${dur}</span>` : ''}
+        ${noWaterBadge}
+        ${dur && !s.noWater ? `<span class="past-session-tag">${dur}</span>` : ''}
         ${processed}
         <div class="past-session-tags">
           ${(s.tags || []).map(t => `<span class="past-session-tag">${t}</span>`).join('')}
@@ -2050,9 +2090,8 @@ function exportFeedback() {
   const exported = unprocessed.map(s => ({
     date: s.date,
     spot: s.spotName,
-    board: s.boardName,
-    rating: s.rating,
-    duration: s.duration,
+    noWater: s.noWater || false,
+    ...(s.noWater ? {} : { board: s.boardName, rating: s.rating, duration: s.duration }),
     tags: s.tags,
     notes: s.notes || ''
   }));
