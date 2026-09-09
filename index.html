@@ -58,15 +58,34 @@ a { color: var(--blue); text-decoration: none; }
 }
 
 /* Day tabs */
-.day-tabs { display: flex; gap: 0.4rem; }
+.day-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
 .day-tab {
-  flex: 1; padding: 0.5rem; border: none; border-radius: var(--radius-sm);
+  position: relative;
+  padding: 0.55rem 0.15rem 0.5rem; border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   background: var(--card); color: var(--text-muted); cursor: pointer;
-  font-family: inherit; font-size: 0.78rem; font-weight: 600;
-  transition: all 0.2s;
+  font-family: inherit; transition: all 0.2s;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
+.day-tab-label { font-size: 0.78rem; font-weight: 700; }
+.day-tab-sub { font-size: 0.62rem; opacity: 0.75; font-weight: 500; }
 .day-tab.active { background: var(--cyan); color: var(--bg); }
+.day-tab.active .day-tab-sub { opacity: 0.85; }
 .day-tab:not(.active):hover { background: var(--card-hover); color: var(--text); }
+
+/* Confidence badge — top-right corner pastille */
+.day-conf {
+  position: absolute; top: -5px; right: -5px;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--bg);
+  display: grid; place-items: center;
+  font-size: 9px; font-weight: 900; color: white; line-height: 1;
+}
+.day-tab.active .day-conf { border-color: var(--cyan); }
+.conf-gold   { background: #0d8f5b; }  /* vert foncé, garanti (avec ✓) */
+.conf-green  { background: #34d399; }  /* vert clair, confiant */
+.conf-yellow { background: #fbbf24; }
+.conf-red    { background: #f87171; }
 
 /* ========== AVAILABILITY PANEL ========== */
 .avail-toggle {
@@ -940,7 +959,7 @@ async function fetchMarineData() {
   const url = 'https://marine-api.open-meteo.com/v1/marine'
     + '?latitude=43.48&longitude=-1.56'
     + '&hourly=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,wind_wave_period,sea_surface_temperature'
-    + '&forecast_days=3&timezone=Europe%2FParis';
+    + '&forecast_days=5&timezone=Europe%2FParis';
   return fetchWithCache(url, 'marine');
 }
 
@@ -948,8 +967,27 @@ async function fetchWeatherData() {
   const url = 'https://api.open-meteo.com/v1/forecast'
     + '?latitude=43.48&longitude=-1.56'
     + '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,weather_code'
-    + '&forecast_days=3&timezone=Europe%2FParis';
+    + '&forecast_days=5&timezone=Europe%2FParis';
   return fetchWithCache(url, 'weather');
+}
+
+// Multi-model fetch for confidence — compares ECMWF, GFS, ICON
+async function fetchMultiModelWeather() {
+  const url = 'https://api.open-meteo.com/v1/forecast'
+    + '?latitude=43.48&longitude=-1.56'
+    + '&hourly=wind_speed_10m,wind_direction_10m'
+    + '&models=ecmwf_ifs025,gfs_seamless,icon_seamless'
+    + '&forecast_days=5&timezone=Europe%2FParis';
+  return fetchWithCache(url, 'weather_multi');
+}
+
+async function fetchMultiModelMarine() {
+  const url = 'https://marine-api.open-meteo.com/v1/marine'
+    + '?latitude=43.48&longitude=-1.56'
+    + '&hourly=swell_wave_height,swell_wave_period'
+    + '&models=ewam,gwam,best_match'
+    + '&forecast_days=5&timezone=Europe%2FParis';
+  return fetchWithCache(url, 'marine_multi');
 }
 
 function getHourlyData(marine, weather, hourIndex) {
@@ -1564,6 +1602,7 @@ function renderTimeline(marine, weather, dayStartIdx, tideData, spotName) {
 // BEST TIME SLOT FINDER
 // ================================================================
 let _globalMarine = null, _globalWeather = null;
+let _globalMultiWeather = null, _globalMultiMarine = null;
 
 function findBestSlot(spot, baseDate, fitness, fromH, toH) {
   if (!_globalMarine || !_globalWeather) return null;
@@ -1635,21 +1674,98 @@ function getDayDate(offset) {
   return d;
 }
 
-function setupDayTabs() {
-  const container = document.getElementById('dayTabs');
-  const days = [];
-  const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+// Confidence per day, derived from spread between ECMWF / GFS / ICON models
+// Returns 'gold' (garanti) | 'green' (confiant) | 'yellow' (peu confiant) | 'red' (indicatif)
+function computeDayConfidence(dayOffset) {
+  if (!_globalMultiWeather?.hourly || !_globalMultiMarine?.hourly) return 'green';
+  const d = new Date(); d.setDate(d.getDate() + dayOffset); d.setHours(0,0,0,0);
+  const dayStr = d.toISOString().substring(0,10);
+  const wt = _globalMultiWeather.hourly.time || [];
+  const mt = _globalMultiMarine.hourly.time || [];
 
-  for (let i = 0; i < 3; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    const label = i === 0 ? "Aujourd'hui" : i === 1 ? 'Demain' : dayNames[d.getDay()] + ' ' + d.getDate();
-    days.push(label);
+  // Middle of the day 10h-18h: representative of the surf window
+  const relevantHours = [10, 12, 14, 16, 18];
+  const cvs = [];
+
+  const cv = (values) => {
+    const clean = values.filter(v => v != null && !isNaN(v));
+    if (clean.length < 2) return 0;
+    const mean = clean.reduce((a,b)=>a+b, 0) / clean.length;
+    if (mean === 0) return 0;
+    const variance = clean.reduce((a,b) => a + (b-mean)**2, 0) / clean.length;
+    return Math.sqrt(variance) / Math.abs(mean); // coefficient of variation
+  };
+
+  for (const h of relevantHours) {
+    const iso = `${dayStr}T${String(h).padStart(2,'0')}:00`;
+    // Weather models
+    const wi = wt.indexOf(iso);
+    if (wi >= 0) {
+      const winds = [
+        _globalMultiWeather.hourly.wind_speed_10m_ecmwf_ifs025?.[wi],
+        _globalMultiWeather.hourly.wind_speed_10m_gfs_seamless?.[wi],
+        _globalMultiWeather.hourly.wind_speed_10m_icon_seamless?.[wi],
+      ];
+      cvs.push(cv(winds));
+    }
+    // Marine models
+    const mi = mt.indexOf(iso);
+    if (mi >= 0) {
+      const heights = [
+        _globalMultiMarine.hourly.swell_wave_height_ewam?.[mi],
+        _globalMultiMarine.hourly.swell_wave_height_gwam?.[mi],
+        _globalMultiMarine.hourly.swell_wave_height_marine_best_match?.[mi],
+      ];
+      cvs.push(cv(heights) * 1.2); // marine spread weighted higher
+    }
   }
 
-  container.innerHTML = days.map((label, i) =>
-    `<button class="day-tab ${i === 0 ? 'active' : ''}" data-day="${i}">${label}</button>`
-  ).join('');
+  if (cvs.length === 0) return 'green';
+  // Use the WORST hour's CV as the day's confidence (weakest link)
+  const maxCv = Math.max(...cvs);
+
+  if (maxCv < 0.10) return 'gold';    // ✓ Garanti — modèles très alignés
+  if (maxCv < 0.25) return 'green';   // 🟢 Confiant
+  if (maxCv < 0.45) return 'yellow';  // 🟡 Peu confiant
+  return 'red';                        // 🔴 Indicatif
+}
+
+const CONFIDENCE_META = {
+  gold:   { label: 'Garanti',      color: '#0d8f5b', markCoche: true  },
+  green:  { label: 'Confiant',     color: '#34d399', markCoche: false },
+  yellow: { label: 'Peu confiant', color: '#fbbf24', markCoche: false },
+  red:    { label: 'Indicatif',    color: '#f87171', markCoche: false },
+};
+
+function setupDayTabs() {
+  const container = document.getElementById('dayTabs');
+  const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+
+  const buildTabs = () => {
+    const days = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      let label, sub;
+      if (i === 0)      { label = 'Auj';  sub = dayNames[d.getDay()] + ' ' + d.getDate(); }
+      else if (i === 1) { label = 'Dem';  sub = dayNames[d.getDay()] + ' ' + d.getDate(); }
+      else              { label = dayNames[d.getDay()]; sub = String(d.getDate()); }
+      days.push({ label, sub, conf: computeDayConfidence(i) });
+    }
+
+    container.innerHTML = days.map((d, i) => {
+      const meta = CONFIDENCE_META[d.conf];
+      const badge = `<span class="day-conf conf-${d.conf}" title="Confiance : ${meta.label}">${meta.markCoche ? '✓' : ''}</span>`;
+      return `<button class="day-tab ${i === currentDayOffset ? 'active' : ''}" data-day="${i}">
+        ${badge}
+        <div class="day-tab-label">${d.label}</div>
+        <div class="day-tab-sub">${d.sub}</div>
+      </button>`;
+    }).join('');
+  };
+
+  buildTabs();
+  container._rebuild = buildTabs; // exposed so we can refresh after multi-model data lands
 
   container.addEventListener('click', e => {
     const btn = e.target.closest('.day-tab');
@@ -1680,6 +1796,16 @@ async function loadData() {
     _globalWeather = weather;
     document.getElementById('lastUpdate').textContent = `Mis à jour : ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
     renderAll();
+    // Load multi-model confidence data in background (non-blocking)
+    Promise.all([fetchMultiModelWeather(), fetchMultiModelMarine()])
+      .then(([mw, mm]) => {
+        _globalMultiWeather = mw;
+        _globalMultiMarine = mm;
+        // Rebuild day tabs with confidence badges now that we have the data
+        const container = document.getElementById('dayTabs');
+        if (container?._rebuild) container._rebuild();
+      })
+      .catch(err => console.warn('Multi-model confidence unavailable:', err.message));
   } catch (err) {
     document.getElementById('content').innerHTML = `
       <div class="loading">
