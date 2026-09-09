@@ -738,6 +738,7 @@ const BOARDS = [
   { id: 'mousse78', name: 'Mousse 500 7\'8', size: '7\'8', volume: 60, waveRange: [0.3, 1.0], stability: 5, maneuver: 1, crowdSafe: true, icon: '🧊' },
   { id: 'mousse60', name: 'Mousse 900 6\'', size: '6\'0', volume: 46, waveRange: [0.3, 1.2], stability: 3, maneuver: 3, crowdSafe: true, icon: '🔵' },
   { id: 'reload610', name: 'Fourth Reload 6\'10', size: '6\'10', volume: 46, waveRange: [0.5, 1.5], stability: 3, maneuver: 4, crowdSafe: false, icon: '🔥' },
+  { id: 'fish511', name: 'Fish 5\'11 Christenson', size: '5\'11', volume: 39.2, waveRange: [0.4, 1.4], stability: 3, maneuver: 4, crowdSafe: false, icon: '🐟' },
 ];
 
 const FITNESS_EMOJIS = { 1: '😴', 2: '😑', 3: '😐', 4: '💪', 5: '🔥' };
@@ -1201,16 +1202,21 @@ function recommendBoard(waveHeight, wavePeriod, windSpeed, fitness, isCrowded) {
       boards.push({ board: BOARDS[1], reason: 'Maximum de rame pour micro-vagues' }); // Longboard
       boards.push({ board: BOARDS[2], reason: 'Volume max pour tout attraper' }); // Mousse 7'8
     } else if (waveHeight < 0.8) {
+      const glassy = windSpeed < 12 && wavePeriod >= 9;
+      if (glassy) boards.push({ board: BOARDS[5], reason: 'Fish = glide max en petit clean' }); // Fish 5'11
       boards.push({ board: BOARDS[1], reason: 'Glide parfait pour petites vagues' }); // Longboard
       boards.push({ board: BOARDS[4], reason: 'Polyvalente, ta favorite' }); // Reload
       boards.push({ board: BOARDS[3], reason: 'Fun et facile en petit' }); // Mousse 6'
     } else if (waveHeight < 1.2) {
+      const glassy = windSpeed < 12 && wavePeriod >= 10;
+      if (glassy) boards.push({ board: BOARDS[5], reason: 'Fish taille sur mesure pour ces conditions' }); // Fish 5'11
       boards.push({ board: BOARDS[4], reason: 'Ta go-to pour ces conditions' }); // Reload
       boards.push({ board: BOARDS[0], reason: 'Plus de maniabilité, essaie-la !' }); // Hybride 6'4
       if (wavePeriod >= 10) boards.push({ board: BOARDS[1], reason: 'Longues vagues = longboard' }); // Longboard
     } else if (waveHeight < 1.5) {
       boards.push({ board: BOARDS[0], reason: 'Taillée pour ce format' }); // Hybride
       boards.push({ board: BOARDS[4], reason: 'Polyvalente fiable' }); // Reload
+      if (waveHeight < 1.35 && windSpeed < 10) boards.push({ board: BOARDS[5], reason: 'Fish si vraiment glassy' }); // Fish, borderline
       boards.push({ board: BOARDS[1], reason: 'Stabilité sur les plus grosses séries' }); // Longboard
     } else {
       boards.push({ board: BOARDS[1], reason: 'Stabilité max quand ça pousse' }); // Longboard
