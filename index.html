@@ -1826,7 +1826,11 @@ function renderTop3Bar(active, now, fitness) {
     const score = r.result.score;
     const waveH = r.result.localWaveHeight || 0;
     const crowded = isCrowdedTime(now);
-    const boards = recommendBoard(waveH, 10, 10, fitness, crowded);
+    // Use real conditions (not hardcoded) so top3 bar matches spot card recommendation
+    const c = r.conditions || {};
+    const period = c.swellPeriod || c.wavePeriod || 10;
+    const wind = c.windSpeed ?? 10;
+    const boards = recommendBoard(waveH, period, wind, fitness, crowded);
     const bestSlot = r.bestSlot || findBestSlot(spot, now, fitness, availStart, availEnd);
     const timeLabel = bestSlot ? bestSlot.label.replace(' — ', '-') : '';
     const boardSize = boards[0]?.board.size || '?';
