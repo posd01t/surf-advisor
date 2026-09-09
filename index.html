@@ -52,6 +52,7 @@ a { color: var(--blue); text-decoration: none; }
   padding: 0.5rem 0.75rem; margin-bottom: 0.75rem;
 }
 .fitness-label { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
+.fitness-hint { font-size: 0.7rem; color: var(--text-muted); margin: 0.15rem 0 0.4rem; opacity: 0.85; padding-left: 3.2rem; }
 .fitness-slider { flex: 1; accent-color: var(--cyan); cursor: pointer; }
 .fitness-value {
   font-size: 1.1rem; font-weight: 700; min-width: 2.5rem; text-align: center;
@@ -519,6 +520,7 @@ a { color: var(--blue); text-decoration: none; }
     <input type="range" min="1" max="5" value="3" class="fitness-slider" id="fitnessSlider">
     <span class="fitness-value" id="fitnessValue">3 😐</span>
   </div>
+  <div class="fitness-hint" id="fitnessHint"></div>
   <div class="day-tabs" id="dayTabs"></div>
 
   <!-- Availability time filter -->
@@ -769,6 +771,13 @@ const BOARDS = [
 ];
 
 const FITNESS_EMOJIS = { 1: '😴', 2: '😑', 3: '😐', 4: '💪', 5: '🔥' };
+const FITNESS_HINTS = {
+  1: 'Vagues ≤ 1m • spots calmes seulement',
+  2: 'Vagues ≤ 1m • spots calmes seulement',
+  3: 'Vagues ≤ 1.8m • tous les spots',
+  4: 'Vagues ≤ 2.2m • tous les spots',
+  5: 'Vagues ≤ 2.2m • tous les spots',
+};
 
 // ================================================================
 // TIDE HARMONICS — Biarritz (port SHOM)
@@ -940,11 +949,13 @@ function isSpotExcluded(spot, tidePhase, tidalCoeff, waveHeight) {
 // ================================================================
 const CACHE_KEY = 'olapierre_cache';
 const CACHE_TTL = 30 * 60 * 1000; // 30 min
+let _lastFetchTs = null; // Timestamp of the most recent successful API fetch
 
 async function fetchWithCache(url, cacheId) {
   try {
     const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
     if (cached[cacheId] && Date.now() - cached[cacheId].ts < CACHE_TTL) {
+      _lastFetchTs = Math.max(_lastFetchTs || 0, cached[cacheId].ts);
       return cached[cacheId].data;
     }
   } catch (e) {}
@@ -953,13 +964,27 @@ async function fetchWithCache(url, cacheId) {
   if (!resp.ok) throw new Error(`API error: ${resp.status}`);
   const data = await resp.json();
 
+  const ts = Date.now();
+  _lastFetchTs = ts;
   try {
     const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
-    cached[cacheId] = { data, ts: Date.now() };
+    cached[cacheId] = { data, ts };
     localStorage.setItem(CACHE_KEY, JSON.stringify(cached));
   } catch (e) {}
 
   return data;
+}
+
+// Format the "last update" text based on real cache age (not browser load time)
+function updateFreshnessDisplay() {
+  const el = document.getElementById('lastUpdate');
+  if (!el || !_lastFetchTs) return;
+  const ageMin = Math.floor((Date.now() - _lastFetchTs) / 60000);
+  const timeStr = new Date(_lastFetchTs).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const ageText = ageMin < 1 ? 'à l\'instant'
+    : ageMin < 60 ? `il y a ${ageMin} min`
+    : `il y a ${Math.floor(ageMin/60)}h${ageMin%60 ? ' ' + (ageMin%60) + 'min' : ''}`;
+  el.textContent = `Forecast fetché à ${timeStr} (${ageText})`;
 }
 
 // Fetch marine data for ALL spots in one API call (Open-Meteo supports comma-separated lat/lon)
@@ -1267,36 +1292,50 @@ function computeSpotScore(spot, conditions, tidePhase, tidalCoeff, fitness) {
 // ================================================================
 function recommendBoard(waveHeight, wavePeriod, windSpeed, fitness, isCrowded) {
   const boards = [];
+  // Lookup par ID (robuste à l'ajout/retrait de boards) — retourne { board, reason } ou null
+  const B = (id, reason) => {
+    const board = BOARDS.find(b => b.id === id);
+    return board ? { board, reason } : null;
+  };
+  const add = (...items) => items.forEach(x => x && boards.push(x));
 
   if (isCrowded) {
     // Favor foam boards
-    if (waveHeight <= 1.0) boards.push({ board: BOARDS[2], reason: 'Mousse safe pour le crowd' }); // 7'8
-    boards.push({ board: BOARDS[3], reason: 'Mousse maniable + safe crowd' }); // 6'0
-    if (waveHeight >= 0.6) boards.push({ board: BOARDS[4], reason: 'Polyvalente, ta favorite' }); // 6'10
+    if (waveHeight <= 1.0) add(B('mousse78', 'Mousse safe pour le crowd'));
+    add(B('mousse60', 'Mousse maniable + safe crowd'));
+    if (waveHeight >= 0.6) add(B('reload610', 'Polyvalente, ta favorite'));
   } else {
     if (waveHeight < 0.5) {
-      boards.push({ board: BOARDS[1], reason: 'Maximum de rame pour micro-vagues' }); // Longboard
-      boards.push({ board: BOARDS[2], reason: 'Volume max pour tout attraper' }); // Mousse 7'8
+      add(
+        B('longboard9', 'Maximum de rame pour micro-vagues'),
+        B('mousse78',   'Volume max pour tout attraper'),
+      );
     } else if (waveHeight < 0.8) {
       const glassy = windSpeed < 12 && wavePeriod >= 9;
-      if (glassy) boards.push({ board: BOARDS[5], reason: 'Fish = glide max en petit clean' }); // Fish 5'11
-      boards.push({ board: BOARDS[1], reason: 'Glide parfait pour petites vagues' }); // Longboard
-      boards.push({ board: BOARDS[4], reason: 'Polyvalente, ta favorite' }); // Reload
-      boards.push({ board: BOARDS[3], reason: 'Fun et facile en petit' }); // Mousse 6'
+      add(
+        glassy ? B('fish511', 'Fish = glide max en petit clean') : null,
+        B('longboard9', 'Glide parfait pour petites vagues'),
+        B('reload610',  'Polyvalente, ta favorite'),
+        B('mousse60',   'Fun et facile en petit'),
+      );
     } else if (waveHeight < 1.2) {
       const glassy = windSpeed < 12 && wavePeriod >= 10;
-      if (glassy) boards.push({ board: BOARDS[5], reason: 'Fish taille sur mesure pour ces conditions' }); // Fish 5'11
-      boards.push({ board: BOARDS[4], reason: 'Ta go-to pour ces conditions' }); // Reload
-      boards.push({ board: BOARDS[0], reason: 'Plus de maniabilité, essaie-la !' }); // Hybride 6'4
-      if (wavePeriod >= 10) boards.push({ board: BOARDS[1], reason: 'Longues vagues = longboard' }); // Longboard
+      add(
+        glassy ? B('fish511', 'Fish taille sur mesure pour ces conditions') : null,
+        B('reload610', 'Ta go-to pour ces conditions'),
+        B('hybride64', 'Plus de maniabilité, essaie-la !'),
+        wavePeriod >= 10 ? B('longboard9', 'Longues vagues = longboard') : null,
+      );
     } else if (waveHeight < 1.5) {
-      boards.push({ board: BOARDS[0], reason: 'Taillée pour ce format' }); // Hybride
-      boards.push({ board: BOARDS[4], reason: 'Polyvalente fiable' }); // Reload
-      if (waveHeight < 1.35 && windSpeed < 10) boards.push({ board: BOARDS[5], reason: 'Fish si vraiment glassy' }); // Fish, borderline
-      boards.push({ board: BOARDS[1], reason: 'Stabilité sur les plus grosses séries' }); // Longboard
+      add(
+        B('hybride64', 'Taillée pour ce format'),
+        B('reload610', 'Polyvalente fiable'),
+        (waveHeight < 1.35 && windSpeed < 10) ? B('fish511', 'Fish si vraiment glassy') : null,
+        B('longboard9', 'Stabilité sur les plus grosses séries'),
+      );
     } else {
-      boards.push({ board: BOARDS[1], reason: 'Stabilité max quand ça pousse' }); // Longboard
-      if (fitness >= 3) boards.push({ board: BOARDS[0], reason: 'Maniable dans le gros si en forme' }); // Hybride
+      add(B('longboard9', 'Stabilité max quand ça pousse'));
+      if (fitness >= 3) add(B('hybride64', 'Maniable dans le gros si en forme'));
     }
   }
 
@@ -1891,10 +1930,17 @@ function setupDayTabs() {
 function setupFitnessSlider() {
   const slider = document.getElementById('fitnessSlider');
   const display = document.getElementById('fitnessValue');
+  const hint = document.getElementById('fitnessHint');
+
+  const refresh = () => {
+    display.textContent = `${currentFitness} ${FITNESS_EMOJIS[currentFitness]}`;
+    if (hint) hint.textContent = FITNESS_HINTS[currentFitness] || '';
+  };
+  refresh();
 
   slider.addEventListener('input', () => {
     currentFitness = parseInt(slider.value);
-    display.textContent = `${currentFitness} ${FITNESS_EMOJIS[currentFitness]}`;
+    refresh();
     renderAll();
   });
 }
@@ -1904,8 +1950,10 @@ async function loadData() {
     const [marine, weather] = await Promise.all([fetchMarineData(), fetchWeatherData()]);
     _globalMarine = marine;
     _globalWeather = weather;
-    document.getElementById('lastUpdate').textContent = `Mis à jour : ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    updateFreshnessDisplay();
     renderAll();
+    // Keep freshness label fresh — refresh every minute
+    setInterval(updateFreshnessDisplay, 60_000);
     // Load multi-model confidence data in background (non-blocking)
     Promise.all([fetchMultiModelWeather(), fetchMultiModelMarine()])
       .then(([mw, mm]) => {
