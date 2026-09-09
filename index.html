@@ -954,21 +954,32 @@ async function fetchWithCache(url, cacheId) {
   return data;
 }
 
+// Fetch marine data for ALL spots in one API call (Open-Meteo supports comma-separated lat/lon)
 async function fetchMarineData() {
-  // Use a central point for the Basque coast - data is regional anyway
+  const lats = SPOTS.map(s => s.lat).join(',');
+  const lons = SPOTS.map(s => s.lon).join(',');
   const url = 'https://marine-api.open-meteo.com/v1/marine'
-    + '?latitude=43.48&longitude=-1.56'
+    + `?latitude=${lats}&longitude=${lons}`
     + '&hourly=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,wind_wave_period,sea_surface_temperature'
     + '&forecast_days=5&timezone=Europe%2FParis';
-  return fetchWithCache(url, 'marine');
+  const arr = await fetchWithCache(url, 'marine_per_spot');
+  // arr is an array (one entry per spot) — build a map keyed by spot id
+  const map = {};
+  SPOTS.forEach((s, i) => { map[s.id] = arr[i]; });
+  return map;
 }
 
 async function fetchWeatherData() {
+  const lats = SPOTS.map(s => s.lat).join(',');
+  const lons = SPOTS.map(s => s.lon).join(',');
   const url = 'https://api.open-meteo.com/v1/forecast'
-    + '?latitude=43.48&longitude=-1.56'
+    + `?latitude=${lats}&longitude=${lons}`
     + '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,weather_code'
     + '&forecast_days=5&timezone=Europe%2FParis';
-  return fetchWithCache(url, 'weather');
+  const arr = await fetchWithCache(url, 'weather_per_spot');
+  const map = {};
+  SPOTS.forEach((s, i) => { map[s.id] = arr[i]; });
+  return map;
 }
 
 // Multi-model fetch for confidence — compares ECMWF, GFS, ICON
@@ -1606,9 +1617,10 @@ let _globalMultiWeather = null, _globalMultiMarine = null;
 
 function findBestSlot(spot, baseDate, fitness, fromH, toH) {
   if (!_globalMarine || !_globalWeather) return null;
-
-  const marine = _globalMarine;
-  const weather = _globalWeather;
+  // Per-spot data (falls back to any available spot if map is missing this id)
+  const marine = _globalMarine[spot.id] || Object.values(_globalMarine)[0];
+  const weather = _globalWeather[spot.id] || Object.values(_globalWeather)[0];
+  if (!marine || !weather) return null;
   const times = marine.hourly.time;
 
   // Find start of day
@@ -1824,8 +1836,10 @@ async function loadData() {
 function renderAll() {
   if (!_globalMarine || !_globalWeather) return;
 
-  const marine = _globalMarine;
-  const weather = _globalWeather;
+  // Any spot's data can be used for the timeline (they share the same time axis)
+  const anyMarine = Object.values(_globalMarine)[0];
+  const anyWeather = Object.values(_globalWeather)[0];
+  if (!anyMarine || !anyWeather) return;
   const now = getDayDate(currentDayOffset);
   const fitness = currentFitness;
 
@@ -1835,7 +1849,7 @@ function renderAll() {
 
   // Find hour index for the selected day
   const dayStr = now.toISOString().slice(0, 10);
-  const times = marine.hourly.time;
+  const times = anyMarine.hourly.time;
   let dayStartIdx = times.findIndex(t => t.startsWith(dayStr));
   if (dayStartIdx === -1) dayStartIdx = 0;
 
@@ -1851,10 +1865,12 @@ function renderAll() {
       return { spot, result: slot.result, conditions: slot.conditions, bestSlot: slot };
     }
     // No valid slot — spot is excluded for all hours in the window
-    // Try scoring at mid-window to get an exclusion reason
+    // Try scoring at mid-window to get an exclusion reason (per-spot data)
+    const spotMarine = _globalMarine[spot.id] || anyMarine;
+    const spotWeather = _globalWeather[spot.id] || anyWeather;
     const midH = Math.floor((availStart + availEnd) / 2);
     const midIdx = dayStartIdx + midH;
-    const cond = getWindowAverage(marine, weather, midIdx, 2);
+    const cond = getWindowAverage(spotMarine, spotWeather, midIdx, 2);
     const midDate = new Date(times[midIdx]);
     const tp = getTidePhase(midDate, tideData);
     const coeff = getTidalCoefficient(midDate);
@@ -1866,11 +1882,11 @@ function renderAll() {
   const active = results.filter(r => !r.result.excluded).sort((a, b) => b.result.score - a.result.score);
   const excluded = results.filter(r => r.result.excluded).map(r => ({ spot: r.spot, reason: r.result.reason }));
 
-  // Use best spot's conditions for weather summary, or mid-window fallback
+  // Use best spot's conditions for weather summary, or mid-window fallback (from any spot)
   const topConditions = active[0]?.conditions || (() => {
     const midH = Math.floor((availStart + availEnd) / 2);
     const midIdx = dayStartIdx + midH;
-    return getWindowAverage(marine, weather, midIdx, 2);
+    return getWindowAverage(anyMarine, anyWeather, midIdx, 2);
   })();
   document.getElementById('weatherSummary').textContent =
     `${weatherIcon(topConditions.weatherCode)} ${topConditions.temp.toFixed(0)}°C • Vent ${topConditions.windSpeed.toFixed(0)} km/h`;
@@ -1900,8 +1916,11 @@ function renderAll() {
   }
   html += '</div>';
 
-  // Timeline for top spot
-  html += renderTimeline(marine, weather, dayStartIdx, tideData, topSpotName);
+  // Timeline uses the top spot's own marine+weather (per-spot precision)
+  const topSpotId = top3[0]?.spot?.id;
+  const timelineMarine = topSpotId ? (_globalMarine[topSpotId] || anyMarine) : anyMarine;
+  const timelineWeather = topSpotId ? (_globalWeather[topSpotId] || anyWeather) : anyWeather;
+  html += renderTimeline(timelineMarine, timelineWeather, dayStartIdx, tideData, topSpotName);
 
   // Excluded spots
   html += renderExcludedSpots(excluded);
