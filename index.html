@@ -658,6 +658,7 @@ const SPOTS = [
     tideExclusion: { type: 'very-low-big-coeff', reason: 'Rochers affleurants à marée très basse (gros coefficients)' },
     swellRange: [0.4, 2.0],
     windProtection: 0.05, // plage très ouverte
+    crowdFactor: 0.9, // grand beach break, se dilue vite
     cam: 'https://www.quiksilver.fr/surf-webcams/guethary.html'
   },
   {
@@ -670,6 +671,7 @@ const SPOTS = [
     tideExclusion: { type: 'very-low-big-coeff', reason: 'Rochers affleurants à marée très basse (gros coefficients)' },
     swellRange: [0.4, 1.8],
     windProtection: 0.10, // protégé un peu par Ilbarritz hill côté sud
+    crowdFactor: 1.3, // très populaire, accès facile
     cam: 'https://www.quiksilver.fr/surf-webcams/biarritz-la-grande-plage.html'
   },
   {
@@ -682,6 +684,7 @@ const SPOTS = [
     tideExclusion: { type: 'very-high-big-swell', reason: 'Dalles rocheuses sud, projection contre front de mer si grosse houle' },
     swellRange: [0.4, 1.8],
     windProtection: 0.05, // dalles ouvertes, peu protégé
+    crowdFactor: 1.1,
     cam: 'https://www.quiksilver.fr/surf-webcams/guethary.html'
   },
   {
@@ -694,6 +697,7 @@ const SPOTS = [
     tideExclusion: { type: 'high-tide', reason: 'Plage disparaît, vagues sur rochers/remblais — DANGER' },
     swellRange: [0.5, 2.0],
     windProtection: 0.20, // falaise sud protège vents S/SW
+    crowdFactor: 1.5, // école de surf, plage star, toujours peuplée
     cam: 'https://www.quiksilver.fr/surf-webcams/biarritz-cote-des-basques.html'
   },
   {
@@ -706,6 +710,7 @@ const SPOTS = [
     tideExclusion: { type: 'very-high', reason: 'Blocage contre rochers/digues à marée très haute' },
     swellRange: [0.4, 1.8],
     windProtection: 0.25, // baie SJL protège du SW
+    crowdFactor: 0.9,
     cam: 'https://www.quiksilver.fr/surf-webcams/saint-jean-de-luz.html'
   },
   {
@@ -718,6 +723,7 @@ const SPOTS = [
     tideExclusion: { type: 'high-big-coeff', reason: 'Ne fonctionne plus, vagues ferment à marée haute' },
     swellRange: [0.5, 2.0],
     windProtection: 0.15, // pointe rocheuse abrite un peu
+    crowdFactor: 0.6, // accès moins évident
     cam: 'https://www.quiksilver.fr/surf-webcams/saint-jean-de-luz.html'
   },
   {
@@ -730,6 +736,7 @@ const SPOTS = [
     tideExclusion: { type: 'low-to-mid', reason: 'Rochers dangereux à marée basse/mi-basse, surtout côté nord' },
     swellRange: [0.3, 1.2],
     windProtection: 0.25, // reef au pied de falaise protège vents S
+    crowdFactor: 0.7,
     cam: 'https://www.quiksilver.fr/surf-webcams/guethary.html'
   },
   {
@@ -742,6 +749,7 @@ const SPOTS = [
     tideExclusion: null,
     swellRange: [0.5, 2.5],
     windProtection: 0.55, // baie de Txingudi très protégée vents W/NW/SW
+    crowdFactor: 1.1, // très fréquenté quand les autres spots sont fermés
     cam: 'https://www.quiksilver.fr/surf-webcams/hendaye.html'
   }
 ];
@@ -1295,14 +1303,31 @@ function recommendBoard(waveHeight, wavePeriod, windSpeed, fitness, isCrowded) {
   return boards.slice(0, 2);
 }
 
-function isCrowdedTime(date) {
+// Crowd baseline probability [0-1] based on time of year, day, hour only
+function crowdBaseline(date) {
   const month = date.getMonth(); // 0-indexed
   const day = date.getDay(); // 0=Sun
   const hour = date.getHours();
-  const isSummer = month >= 5 && month <= 8; // June-Sept
+  const isPeakSummer = month >= 6 && month <= 7;   // July-Aug (haute saison)
+  const isShoulder   = month === 5 || month === 8; // Jun, Sept
   const isWeekend = day === 0 || day === 6;
-  const isPeakHour = hour >= 10 && hour <= 16;
-  return (isSummer && isPeakHour) || (isWeekend && isPeakHour && month >= 4);
+  const isPeakHour = hour >= 10 && hour <= 17;
+  let score = 0;
+  if (isPeakSummer) score += 0.5;
+  else if (isShoulder) score += 0.25;
+  if (isWeekend) score += 0.3;
+  if (isPeakHour) score += 0.2;
+  return Math.min(score, 1);
+}
+
+// Per-spot crowded status: combines baseline with spot's own crowdFactor
+function isCrowdedAt(spot, date) {
+  return crowdBaseline(date) * (spot.crowdFactor ?? 1.0) >= 0.5;
+}
+
+// Legacy signature (kept for the fallback path where we don't have a spot)
+function isCrowdedTime(date) {
+  return crowdBaseline(date) >= 0.5;
 }
 
 // ================================================================
@@ -1426,11 +1451,30 @@ function recommendWetsuit(waterTemp) {
   return { label: '4/3', icon: '🧥' };
 }
 
+// Swell trend over the next ~6h at this spot: 'up' | 'down' | 'stable'
+function getSwellTrend(spot, baseDate) {
+  const marine = _globalMarine?.[spot.id];
+  if (!marine?.hourly?.time) return { arrow: '', label: '' };
+  const iso = baseDate.toISOString().slice(0, 13);
+  const nowIdx = marine.hourly.time.findIndex(t => t.startsWith(iso));
+  if (nowIdx < 0) return { arrow: '', label: '' };
+  const futureIdx = nowIdx + 6;
+  if (futureIdx >= marine.hourly.time.length) return { arrow: '', label: '' };
+  const now = marine.hourly.swell_wave_height[nowIdx];
+  const future = marine.hourly.swell_wave_height[futureIdx];
+  if (now == null || future == null) return { arrow: '', label: '' };
+  const diff = future - now;
+  if (diff > 0.20) return { arrow: '↗', label: 'monte', color: '#34d399' };
+  if (diff < -0.20) return { arrow: '↘', label: 'descend', color: '#fbbf24' };
+  return { arrow: '→', label: 'stable', color: '#8592a8' };
+}
+
 function renderSpotCard(spot, result, conditions, tideData, now, rank, fitness) {
   const waveH = result.localWaveHeight || (conditions.swellHeight || conditions.waveHeight) * (spot.swellFactor || 0.85);
-  const crowded = isCrowdedTime(now);
+  const crowded = isCrowdedAt(spot, now);
   const boards = recommendBoard(waveH, conditions.swellPeriod || conditions.wavePeriod, conditions.windSpeed, fitness, crowded);
   const sc = scoreColor(result.score);
+  const trend = getSwellTrend(spot, now);
 
   // Find best time slot for this spot today (within availability window)
   const bestSlot = findBestSlot(spot, now, fitness, availStart, availEnd);
@@ -1455,7 +1499,7 @@ function renderSpotCard(spot, result, conditions, tideData, now, rank, fitness) 
       <div class="cond-grid">
         <div class="cond-cell">
           <div class="cond-icon">${dirArrow(conditions.swellDir || conditions.waveDir)}</div>
-          <div class="cond-value">${waveH.toFixed(1)}m</div>
+          <div class="cond-value">${waveH.toFixed(1)}m ${trend.arrow ? `<span class="trend-arrow" style="color:${trend.color};font-size:0.75rem;" title="Swell ${trend.label} sur les 6h suivantes">${trend.arrow}</span>` : ''}</div>
           <div class="cond-label">${(conditions.swellPeriod || conditions.wavePeriod).toFixed(0)}s ${dirLabel(conditions.swellDir || conditions.waveDir)}</div>
         </div>
         <div class="cond-cell">
@@ -2024,7 +2068,7 @@ function renderTop3Bar(active, now, fitness) {
     const spot = r.spot;
     const score = r.result.score;
     const waveH = r.result.localWaveHeight || 0;
-    const crowded = isCrowdedTime(now);
+    const crowded = isCrowdedAt(spot, now);
     // Use real conditions (not hardcoded) so top3 bar matches spot card recommendation
     const c = r.conditions || {};
     const period = c.swellPeriod || c.wavePeriod || 10;
