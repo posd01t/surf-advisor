@@ -1674,7 +1674,8 @@ function getDayDate(offset) {
   return d;
 }
 
-// Confidence per day, derived from spread between ECMWF / GFS / ICON models
+// Confidence per day, derived from ABSOLUTE spread between ECMWF/GFS/ICON models
+// Thresholds calibrated to what matters for surf (3km/h wind ≠ major, 5m/s IS)
 // Returns 'gold' (garanti) | 'green' (confiant) | 'yellow' (peu confiant) | 'red' (indicatif)
 function computeDayConfidence(dayOffset) {
   if (!_globalMultiWeather?.hourly || !_globalMultiMarine?.hourly) return 'green';
@@ -1683,51 +1684,55 @@ function computeDayConfidence(dayOffset) {
   const wt = _globalMultiWeather.hourly.time || [];
   const mt = _globalMultiMarine.hourly.time || [];
 
-  // Middle of the day 10h-18h: representative of the surf window
-  const relevantHours = [10, 12, 14, 16, 18];
-  const cvs = [];
+  const relevantHours = [10, 12, 14, 16, 18]; // surf window
+  let worstWindStd = 0, worstSwellStd = 0;
+  let windSamples3 = 0, swellSamples3 = 0; // count of hours with all 3 models present
+  let hasAny = false;
 
-  const cv = (values) => {
+  const stdev = (values) => {
     const clean = values.filter(v => v != null && !isNaN(v));
-    if (clean.length < 2) return 0;
+    if (clean.length < 2) return { std: 0, n: clean.length };
     const mean = clean.reduce((a,b)=>a+b, 0) / clean.length;
-    if (mean === 0) return 0;
     const variance = clean.reduce((a,b) => a + (b-mean)**2, 0) / clean.length;
-    return Math.sqrt(variance) / Math.abs(mean); // coefficient of variation
+    return { std: Math.sqrt(variance), n: clean.length };
   };
 
   for (const h of relevantHours) {
     const iso = `${dayStr}T${String(h).padStart(2,'0')}:00`;
-    // Weather models
     const wi = wt.indexOf(iso);
     if (wi >= 0) {
-      const winds = [
+      const { std, n } = stdev([
         _globalMultiWeather.hourly.wind_speed_10m_ecmwf_ifs025?.[wi],
         _globalMultiWeather.hourly.wind_speed_10m_gfs_seamless?.[wi],
         _globalMultiWeather.hourly.wind_speed_10m_icon_seamless?.[wi],
-      ];
-      cvs.push(cv(winds));
+      ]);
+      if (n >= 2) { worstWindStd = Math.max(worstWindStd, std); hasAny = true; }
+      if (n === 3) windSamples3++;
     }
-    // Marine models
     const mi = mt.indexOf(iso);
     if (mi >= 0) {
-      const heights = [
+      const { std, n } = stdev([
         _globalMultiMarine.hourly.swell_wave_height_ewam?.[mi],
         _globalMultiMarine.hourly.swell_wave_height_gwam?.[mi],
         _globalMultiMarine.hourly.swell_wave_height_marine_best_match?.[mi],
-      ];
-      cvs.push(cv(heights) * 1.2); // marine spread weighted higher
+      ]);
+      if (n >= 2) { worstSwellStd = Math.max(worstSwellStd, std); hasAny = true; }
+      if (n === 3) swellSamples3++;
     }
   }
 
-  if (cvs.length === 0) return 'green';
-  // Use the WORST hour's CV as the day's confidence (weakest link)
-  const maxCv = Math.max(...cvs);
+  if (!hasAny) return 'green'; // no data → neutral fallback
 
-  if (maxCv < 0.10) return 'gold';    // ✓ Garanti — modèles très alignés
-  if (maxCv < 0.25) return 'green';   // 🟢 Confiant
-  if (maxCv < 0.45) return 'yellow';  // 🟡 Peu confiant
-  return 'red';                        // 🔴 Indicatif
+  // Gold requires all 3 models on both wind AND swell for most of the window
+  const fullCoverage = windSamples3 >= 3 && swellSamples3 >= 3;
+
+  // Absolute std thresholds (calibrated to surf impact):
+  // - Wind std 3km/h ≈ negligible for decision; 8km/h = flip; 15km/h = chaos
+  // - Swell std 0.15m ≈ negligible; 0.35m = notable; 0.60m = model disagreement
+  if (fullCoverage && worstWindStd < 3.5 && worstSwellStd < 0.15) return 'gold';
+  if (worstWindStd < 7 && worstSwellStd < 0.30) return 'green';
+  if (worstWindStd < 12 && worstSwellStd < 0.55) return 'yellow';
+  return 'red';
 }
 
 const CONFIDENCE_META = {

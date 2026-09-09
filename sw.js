@@ -1,4 +1,4 @@
-const CACHE_NAME = 'olapierre-v16';
+const CACHE_NAME = 'olapierre-v17';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', e => {
