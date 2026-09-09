@@ -995,10 +995,10 @@ async function fetchMultiModelWeather() {
 async function fetchMultiModelMarine() {
   const url = 'https://marine-api.open-meteo.com/v1/marine'
     + '?latitude=43.48&longitude=-1.56'
-    + '&hourly=swell_wave_height,swell_wave_period'
+    + '&hourly=swell_wave_height,swell_wave_period,swell_wave_direction'
     + '&models=ewam,gwam,best_match'
     + '&forecast_days=5&timezone=Europe%2FParis';
-  return fetchWithCache(url, 'marine_multi');
+  return fetchWithCache(url, 'marine_multi_v2');
 }
 
 function getHourlyData(marine, weather, hourIndex) {
@@ -1105,9 +1105,13 @@ function scoreWind(speed, gustSpeed, windDir, offshoreRange, windProtection = 0)
   } else if (effSpeed < 20) {
     score = isOffshore ? 20 : isCrossOff ? 14 : 8;
   } else if (effSpeed < 30) {
-    score = isOffshore ? 10 : isCrossOff ? 5 : 2;
+    // Offshore fort commence à être problématique : couche les vagues et rend la rame difficile
+    score = isOffshore ? 8 : isCrossOff ? 5 : 2;
+  } else if (effSpeed < 40) {
+    // Offshore très fort = souvent pire qu'un onshore modéré (rame impossible, vagues sur-creusées)
+    score = isOffshore ? 3 : isCrossOff ? 2 : 0;
   } else {
-    score = 0; // warning
+    score = 0;
   }
   return score;
 }
@@ -1201,6 +1205,15 @@ function computeSpotScore(spot, conditions, tidePhase, tidalCoeff, fitness) {
   else if (steepness > 0.23) steepnessPenalty = -7;
   else if (steepness > 0.20) steepnessPenalty = -3;
 
+  // Wind wave (clapot) : mer du vent superposée à la houle propre.
+  // Ratio wind_wave / swell donne le "chop factor" — surface désorganisée même avec houle propre.
+  const windWaveH = conditions.windWaveHeight || 0;
+  const chopRatio = windWaveH / Math.max(rawSwell, 0.3);
+  let chopPenalty = 0;
+  if (chopRatio > 0.60) chopPenalty = -10;      // clapot domine → chaos
+  else if (chopRatio > 0.35) chopPenalty = -5;  // clapot significatif
+  else if (chopRatio > 0.20) chopPenalty = -2;  // léger clapot
+
   // Fitness bonus/malus on wave score
   let fitnessAdj = 0;
   if (fitness >= 4 && waveH > 1.2) fitnessAdj = 3;
@@ -1208,7 +1221,7 @@ function computeSpotScore(spot, conditions, tidePhase, tidalCoeff, fitness) {
 
   // Distance dynamiquement pondérée : tiebreaker seulement quand les conditions sont bonnes,
   // et n'inverse pas un meilleur spot si conditions moyennes
-  const conditionsScore = waveSc + periodSc + windScore + tideSc + dirSc + steepnessPenalty + fitnessAdj;
+  const conditionsScore = waveSc + periodSc + windScore + tideSc + dirSc + steepnessPenalty + chopPenalty + fitnessAdj;
   const distWeight = conditionsScore >= 65 ? 1.0 : conditionsScore >= 50 ? 0.5 : 0.2;
   const effDistSc = Math.round(distSc * distWeight);
 
@@ -1226,13 +1239,19 @@ function computeSpotScore(spot, conditions, tidePhase, tidalCoeff, fitness) {
   if (tideSc >= 12) tags.push({ text: 'Bonne marée', type: 'good' });
 
   if (conditions.windSpeed >= 30) warnings.push('Vent fort');
+  // Offshore fort : signale même si vent est offshore (couche les vagues, rame dure)
+  const midOffshore = (spot.offshoreDir[0] + spot.offshoreDir[1]) / 2;
+  const isOffshoreWind = isInRange(conditions.windDir, spot.offshoreDir);
+  if (isOffshoreWind && conditions.windSpeed >= 25) warnings.push('Offshore fort — vagues couchées, rame dure');
   if (waveH > 1.5 && fitness < 4) warnings.push('Grosse houle, sois prudent');
   if (waveH > 1.2 && fitness <= 2) warnings.push('Forme nécessaire ≥ 3');
   if (waveH < 0.4) warnings.push('Très petit, peu de vagues');
   if (steepness > 0.28) warnings.push('Mer désorganisée (vagues courtes/hautes)');
   else if (steepness > 0.23) warnings.push('Risque mer peu calée');
+  if (chopRatio > 0.60) warnings.push('Clapot dominant');
+  else if (chopRatio > 0.35) warnings.push('Clapot notable (mer du vent)');
 
-  return { score, excluded: false, waveSc, periodSc, windScore, tideSc, dirSc, distSc, effDistSc, steepnessPenalty, tags, warnings, localWaveHeight };
+  return { score, excluded: false, waveSc, periodSc, windScore, tideSc, dirSc, distSc, effDistSc, steepnessPenalty, chopPenalty, chopRatio, tags, warnings, localWaveHeight };
 }
 
 // ================================================================
@@ -1697,8 +1716,8 @@ function computeDayConfidence(dayOffset) {
   const mt = _globalMultiMarine.hourly.time || [];
 
   const relevantHours = [10, 12, 14, 16, 18]; // surf window
-  let worstWindStd = 0, worstSwellStd = 0;
-  let windSamples3 = 0, swellSamples3 = 0; // count of hours with all 3 models present
+  let worstWindStd = 0, worstSwellStd = 0, worstPeriodStd = 0, worstDirStd = 0;
+  let windSamples3 = 0, swellSamples3 = 0;
   let hasAny = false;
 
   const stdev = (values) => {
@@ -1707,6 +1726,19 @@ function computeDayConfidence(dayOffset) {
     const mean = clean.reduce((a,b)=>a+b, 0) / clean.length;
     const variance = clean.reduce((a,b) => a + (b-mean)**2, 0) / clean.length;
     return { std: Math.sqrt(variance), n: clean.length };
+  };
+
+  // Circular std for directions (0-360°) — handles the 350°/10° wraparound
+  const circularStd = (values) => {
+    const clean = values.filter(v => v != null && !isNaN(v));
+    if (clean.length < 2) return { std: 0, n: clean.length };
+    const rad = clean.map(v => v * Math.PI / 180);
+    const meanSin = rad.reduce((a,b) => a + Math.sin(b), 0) / rad.length;
+    const meanCos = rad.reduce((a,b) => a + Math.cos(b), 0) / rad.length;
+    const R = Math.sqrt(meanSin*meanSin + meanCos*meanCos);
+    // Directional std in degrees; capped at 90° (uniform distribution)
+    const std = Math.sqrt(-2 * Math.log(Math.max(R, 0.001))) * 180 / Math.PI;
+    return { std: Math.min(std, 90), n: clean.length };
   };
 
   for (const h of relevantHours) {
@@ -1723,13 +1755,25 @@ function computeDayConfidence(dayOffset) {
     }
     const mi = mt.indexOf(iso);
     if (mi >= 0) {
-      const { std, n } = stdev([
+      const swellH = stdev([
         _globalMultiMarine.hourly.swell_wave_height_ewam?.[mi],
         _globalMultiMarine.hourly.swell_wave_height_gwam?.[mi],
         _globalMultiMarine.hourly.swell_wave_height_marine_best_match?.[mi],
       ]);
-      if (n >= 2) { worstSwellStd = Math.max(worstSwellStd, std); hasAny = true; }
-      if (n === 3) swellSamples3++;
+      const swellP = stdev([
+        _globalMultiMarine.hourly.swell_wave_period_ewam?.[mi],
+        _globalMultiMarine.hourly.swell_wave_period_gwam?.[mi],
+        _globalMultiMarine.hourly.swell_wave_period_marine_best_match?.[mi],
+      ]);
+      const swellD = circularStd([
+        _globalMultiMarine.hourly.swell_wave_direction_ewam?.[mi],
+        _globalMultiMarine.hourly.swell_wave_direction_gwam?.[mi],
+        _globalMultiMarine.hourly.swell_wave_direction_marine_best_match?.[mi],
+      ]);
+      if (swellH.n >= 2) { worstSwellStd = Math.max(worstSwellStd, swellH.std); hasAny = true; }
+      if (swellP.n >= 2) { worstPeriodStd = Math.max(worstPeriodStd, swellP.std); }
+      if (swellD.n >= 2) { worstDirStd = Math.max(worstDirStd, swellD.std); }
+      if (swellH.n === 3) swellSamples3++;
     }
   }
 
@@ -1738,12 +1782,17 @@ function computeDayConfidence(dayOffset) {
   // Gold requires all 3 models on both wind AND swell for most of the window
   const fullCoverage = windSamples3 >= 3 && swellSamples3 >= 3;
 
-  // Absolute std thresholds (calibrated to surf impact):
-  // - Wind std 3km/h ≈ negligible for decision; 8km/h = flip; 15km/h = chaos
-  // - Swell std 0.15m ≈ negligible; 0.35m = notable; 0.60m = model disagreement
-  if (fullCoverage && worstWindStd < 3.5 && worstSwellStd < 0.15) return 'gold';
-  if (worstWindStd < 7 && worstSwellStd < 0.30) return 'green';
-  if (worstWindStd < 12 && worstSwellStd < 0.55) return 'yellow';
+  // Thresholds calibrated to surf impact:
+  // - Wind std <3.5 km/h negligible; <7 ok; <12 notable; >12 chaos
+  // - Swell H std <0.15m negligible; <0.30 ok; <0.55 notable
+  // - Swell period std <0.8s negligible; <1.5s ok; <2.5s notable
+  // - Swell dir std <10° negligible; <20° ok; <35° notable (agree on direction)
+  if (fullCoverage && worstWindStd < 3.5 && worstSwellStd < 0.15
+      && worstPeriodStd < 0.8 && worstDirStd < 10) return 'gold';
+  if (worstWindStd < 7 && worstSwellStd < 0.30
+      && worstPeriodStd < 1.5 && worstDirStd < 20) return 'green';
+  if (worstWindStd < 12 && worstSwellStd < 0.55
+      && worstPeriodStd < 2.5 && worstDirStd < 35) return 'yellow';
   return 'red';
 }
 
