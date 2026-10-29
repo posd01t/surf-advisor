@@ -11,21 +11,24 @@ PWA perso qui recommande **où, quand et avec quelle planche** surfer depuis Ust
 ## Données
 - **Open-Meteo** (gratuit, sans clé) : Marine API (houle, période, direction, temp. eau) + Forecast API (vent, rafales, météo), récupérés **par spot** (lat/lon séparés par des virgules). Appels multi-modèles en arrière-plan pour le badge de confiance.
 - **Marées** : calculées localement par harmoniques (M2, S2, N2, K2, K1, O1, P1, Q1, M4), coefficient de marée calculé aussi. Pas d'API marée.
-- **localStorage** : `olapierre_cache` (cache des prévisions), `olapierre_feedback` (journal des sessions). ⚠️ Le feedback n'existe que sur le téléphone : l'exporter régulièrement (bouton export) avant tout changement de téléphone/navigateur.
+- Prévisions chargées avec `past_days=2` pour pouvoir figer la prévision d'une session d'hier. Les séries horaires sont en heure locale Europe/Paris : utiliser `localHourKey()`, jamais `toISOString()` (UTC).
+- **localStorage** : `olapierre_cache` (cache des prévisions), `olapierre_feedback` (journal des sessions). ⚠️ Le feedback n'existe que sur le téléphone : l'exporter régulièrement (« Tout réexporter » reste dispo) avant tout changement de téléphone/navigateur.
+- 🔒 **Ne jamais committer les exports de feedback** (notes perso, dépôt public) : ils sont dans `.gitignore`. Les analyser dans la conversation uniquement.
 
 ## Contenu métier (dans `index.html`)
-- `SPOTS` (8) : Uhabia, Ilbarritz, Bidart Centre, Côte des Basques, Marinella, La Madrague, Cenitz, Hendaye. Chaque spot : lat/lon, `driveMin` depuis Ustaritz, `difficulty`, `swellFactor` (exposition), `offshoreDir`, `windProtection`, `bestTide`, `tideExclusion` (règles de sécurité marée + raison), lien webcam Quiksilver. Spots perso ajoutables par l'utilisateur.
+- `SPOTS` (9) : Uhabia, Ilbarritz, Bidart Centre, Erretegia, Côte des Basques, Marinella, La Madrague, Cenitz, Hendaye. Chaque spot : lat/lon, `driveMin` depuis Ustaritz, `difficulty`, `swellFactor` (exposition), `offshoreDir`, `windProtection`, `bestTide`, `tideExclusion` (règles de sécurité marée + raison), lien webcam Quiksilver. Spots perso ajoutables par l'utilisateur.
 - `BOARDS` (quiver, 6) : Hybride 6'4, Longboard 9', Mousse 7'8, Mousse 6', Fourth Reload 6'10, Fish 5'11 Christenson. Chaque planche : volume, `waveRange`, stabilité, maniabilité, `crowdSafe`.
 - Curseur **forme du jour** (1–5) qui borne la taille de vague max et exclut les spots difficiles.
 
 ## Moteur de score
 `computeSpotScore()` combine : taille de vague locale (houle × `swellFactor`), période, vent (offshore/onshore, rafales > 40 km/h = exclusion, cap offshore), chop de mer du vent, alignement marée, direction de houle, distance, tendance de houle, affluence par spot/créneau, confiance (écart-type absolu entre modèles). Exclusions de sécurité via `isSpotExcluded()`.
-`findBestSlot()` cherche le meilleur créneau dans la fenêtre de dispo ; `recommendBoard()` choisit la planche ; `recommendWetsuit()` la combi selon la temp. de l'eau.
+`findBestSlot()` cherche le meilleur créneau de 2 h dans la fenêtre de dispo, **de jour uniquement** (lever −15 min → coucher +15 min, `calcSunTimes()` NOAA avec équation du temps et vrai fuseau) ; `recommendBoard()` choisit la planche (hypothèse en test : vagues 0,5–1,2 m et période < 9 s = vagues molles → Longboard 9' / Mousse 7'8) ; `recommendWetsuit()` la combi selon la temp. de l'eau.
 
 ## UI
-Onglets jour (J à J+4) avec badge de confiance, barre Top 3, cartes spot (score, conditions, mini-courbe de marée SVG, webcam), spots exclus avec raison, timeline horaire, filtre de disponibilité (slider double + presets combinables, lever/coucher du soleil), fraîcheur de la prévision, modal de feedback (date, durée, planche, tags, mode « pas à l'eau ») + historique + export JSON pour recalibrer le scoring.
+Onglets jour (J à J+4) avec badge de confiance, barre Top 3, cartes spot (score, conditions, mini-courbe de marée SVG, webcam), spots exclus avec raison, timeline horaire, filtre de disponibilité (slider double + presets combinables, lever/coucher du soleil), fraîcheur de la prévision, modal de feedback (date, durée, planche, tags, mode « pas à l'eau ») + historique + export JSON pour recalibrer le scoring. Chaque feedback enregistre `forecast` : la prévision de l'appli pour ce spot sur la durée de la session (houle, période, vent, marée, coeff, forme, score, planches recommandées), via `getForecastSnapshot()`.
 
 ## Historique (résumé du git log)
+- Oct. 2026 : réexport des sessions, prévision figée dans chaque feedback, spot Erretegia, règle vagues molles, créneaux de jour uniquement + nuit grisée sur la timeline, fix heure UTC/locale.
 - Avr. 2026 : v1, feedback, filtre de dispo, courbe de marée, spots perso, fix marée inversée.
 - Juin 2026 : calibration du scoring (protection vent, cambrure, distance dynamique), bannière de confiance, mode « pas à l'eau », webcams.
 - Sept. 2026 : prévisions par spot, confiance multi-modèles sur 5 jours, chop, tendance de houle, affluence par spot, Fish 5'11 ajoutée.

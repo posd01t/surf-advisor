@@ -690,6 +690,18 @@ const SPOTS = [
     cam: 'https://www.quiksilver.fr/surf-webcams/guethary.html'
   },
   {
+    id: 'erretegia', name: 'Erretegia', lat: 43.444, lon: -1.578,
+    driveMin: 20, difficulty: 2, swellFactor: 0.80, // crique sous falaise, plutôt abritée
+    coastAngle: 300,
+    bestSwellDir: [270, 320],
+    offshoreDir: [60, 150], // bon par vent d'est
+    bestTide: 'low-to-mid',
+    tideExclusion: { type: 'high-big-coeff', reason: 'Plage quasi disparue sous la falaise, rochers invisibles à marée haute de gros coefficient' },
+    swellRange: [0.4, 1.8],
+    windProtection: 0.15,
+    crowdFactor: 1.1 // spot local, parking vite plein quand c'est bon
+  },
+  {
     id: 'cotebasques', name: 'Côte des Basques', lat: 43.474, lon: -1.571,
     driveMin: 22, difficulty: 3, swellFactor: 0.80,
     coastAngle: 340,
@@ -994,8 +1006,8 @@ async function fetchMarineData() {
   const url = 'https://marine-api.open-meteo.com/v1/marine'
     + `?latitude=${lats}&longitude=${lons}`
     + '&hourly=wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,wind_wave_period,sea_surface_temperature'
-    + '&forecast_days=5&timezone=Europe%2FParis';
-  const arr = await fetchWithCache(url, 'marine_per_spot');
+    + '&past_days=2&forecast_days=5&timezone=Europe%2FParis';
+  const arr = await fetchWithCache(url, 'marine_per_spot_v2');
   // arr is an array (one entry per spot) — build a map keyed by spot id
   const map = {};
   SPOTS.forEach((s, i) => { map[s.id] = arr[i]; });
@@ -1008,8 +1020,8 @@ async function fetchWeatherData() {
   const url = 'https://api.open-meteo.com/v1/forecast'
     + `?latitude=${lats}&longitude=${lons}`
     + '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,weather_code'
-    + '&forecast_days=5&timezone=Europe%2FParis';
-  const arr = await fetchWithCache(url, 'weather_per_spot');
+    + '&past_days=2&forecast_days=5&timezone=Europe%2FParis';
+  const arr = await fetchWithCache(url, 'weather_per_spot_v2');
   const map = {};
   SPOTS.forEach((s, i) => { map[s.id] = arr[i]; });
   return map;
@@ -1032,6 +1044,12 @@ async function fetchMultiModelMarine() {
     + '&models=ewam,gwam,best_match'
     + '&forecast_days=5&timezone=Europe%2FParis';
   return fetchWithCache(url, 'marine_multi_v2');
+}
+
+// 'YYYY-MM-DDTHH' en heure locale (les séries Open-Meteo sont en Europe/Paris, pas en UTC)
+function localHourKey(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}`;
 }
 
 function getHourlyData(marine, weather, hourIndex) {
@@ -1305,7 +1323,15 @@ function recommendBoard(waveHeight, wavePeriod, windSpeed, fitness, isCrowded) {
     add(B('mousse60', 'Mousse maniable + safe crowd'));
     if (waveHeight >= 0.6) add(B('reload610', 'Polyvalente, ta favorite'));
   } else {
-    if (waveHeight < 0.5) {
+    // Hypothèse (session Uhabia 29/10 : galère au takeoff en Reload) : houle courte et petite = vagues molles,
+    // le volume aide à partir. À valider avec les prochains feedbacks (prévision désormais enregistrée).
+    const soft = waveHeight >= 0.5 && waveHeight < 1.2 && wavePeriod < 9;
+    if (soft) {
+      add(
+        B('longboard9', 'Vagues molles : le volume aide à partir'),
+        B('mousse78',   'Volume max si ça pousse vraiment peu'),
+      );
+    } else if (waveHeight < 0.5) {
       add(
         B('longboard9', 'Maximum de rame pour micro-vagues'),
         B('mousse78',   'Volume max pour tout attraper'),
@@ -1494,7 +1520,7 @@ function recommendWetsuit(waterTemp) {
 function getSwellTrend(spot, baseDate) {
   const marine = _globalMarine?.[spot.id];
   if (!marine?.hourly?.time) return { arrow: '', label: '' };
-  const iso = baseDate.toISOString().slice(0, 13);
+  const iso = localHourKey(baseDate);
   const nowIdx = marine.hourly.time.findIndex(t => t.startsWith(iso));
   if (nowIdx < 0) return { arrow: '', label: '' };
   const futureIdx = nowIdx + 6;
@@ -1628,8 +1654,12 @@ function renderTimeline(marine, weather, dayStartIdx, tideData, spotName) {
   const x = i => padL + (i / 23) * chartW;
   const yWave = v => padT + chartH - (v / maxWave) * chartH * 0.6;
 
-  // Wave bars
+  // Wave bars (nuit grisée en fond)
   let bars = '';
+  const sunT = calcSunTimes(new Date(hours[0].time));
+  const xh = hDec => padL + (hDec / 23) * chartW;
+  bars += `<rect x="${padL - 8}" y="${padT}" width="${Math.max(0, xh(sunT.sunrise) - padL + 8)}" height="${chartH}" fill="rgba(2,6,23,0.55)"/>`;
+  bars += `<rect x="${xh(sunT.sunset)}" y="${padT}" width="${Math.max(0, padL + chartW + 8 - xh(sunT.sunset))}" height="${chartH}" fill="rgba(2,6,23,0.55)"/>`;
   for (let i = 0; i < hours.length; i++) {
     const h = hours[i];
     const bx = x(i) - 6;
@@ -1726,13 +1756,17 @@ function findBestSlot(spot, baseDate, fitness, fromH, toH) {
   const times = marine.hourly.time;
 
   // Find start of day
-  const dayStr = baseDate.toISOString().slice(0, 10);
+  const dayStr = localHourKey(baseDate).slice(0, 10);
   let dayStartIdx = times.findIndex(t => t.startsWith(dayStr));
   if (dayStartIdx === -1) return null;
 
   // Availability window (default 6-20)
-  const slotFrom = fromH != null ? Math.floor(fromH) : 6;
-  const slotTo = toH != null ? Math.floor(toH) : 20;
+  let slotFrom = fromH != null ? Math.floor(fromH) : 6;
+  let slotTo = toH != null ? Math.floor(toH) : 20;
+  // Pas de surf de nuit : créneau entier entre le lever (−15 min, première lumière) et le coucher (+15 min)
+  const sun = calcSunTimes(baseDate);
+  slotFrom = Math.max(slotFrom, Math.ceil(sun.sunrise - 0.25));
+  slotTo = Math.min(slotTo, Math.floor(sun.sunset + 0.25));
 
   // Score each 2-hour window within availability
   let bestScore = -1, bestStart = -1, bestEnd = -1, bestDetail = '';
@@ -1989,7 +2023,7 @@ function renderAll() {
   document.getElementById('dateDisplay').textContent = now.toLocaleDateString('fr-FR', dateOpts);
 
   // Find hour index for the selected day
-  const dayStr = now.toISOString().slice(0, 10);
+  const dayStr = localHourKey(now).slice(0, 10);
   const times = anyMarine.hourly.time;
   let dayStartIdx = times.findIndex(t => t.startsWith(dayStr));
   if (dayStartIdx === -1) dayStartIdx = 0;
@@ -2172,6 +2206,40 @@ function getFeedback() {
   catch { return []; }
 }
 
+// Prévision de l'appli pour un spot, à l'heure et sur la durée de la session (pour calibrer le scoring)
+function getForecastSnapshot(spotId, dateStr, durationMin) {
+  try {
+    const spot = SPOTS.find(s => s.id === spotId);
+    const marine = _globalMarine?.[spotId];
+    const weather = _globalWeather?.[spotId];
+    if (!spot || !marine || !weather || !dateStr) return null;
+    const idx = marine.hourly.time.findIndex(t => t.startsWith(dateStr.slice(0, 13)));
+    if (idx < 0) return null;
+    const count = Math.max(1, Math.round((durationMin || 60) / 60));
+    const c = getWindowAverage(marine, weather, idx, count);
+    const d = new Date(dateStr);
+    const td = getTideData(new Date(d.getTime() - 8 * 3600000), 16, 10);
+    const tp = getTidePhase(d, td);
+    const coeff = getTidalCoefficient(d);
+    const res = computeSpotScore(spot, c, tp, coeff, currentFitness);
+    const localH = res.localWaveHeight ?? (c.swellHeight || c.waveHeight) * (spot.swellFactor || 0.85);
+    const reco = recommendBoard(localH, c.swellPeriod || c.wavePeriod, c.windSpeed, currentFitness, isCrowdedAt(spot, d));
+    const r1 = v => v == null || isNaN(v) ? null : Math.round(v * 10) / 10;
+    return {
+      swellHeight: r1(c.swellHeight), swellPeriod: r1(c.swellPeriod), swellDir: Math.round(c.swellDir),
+      waveHeight: r1(c.waveHeight), windWaveHeight: r1(c.windWaveHeight), localWaveHeight: r1(localH),
+      windSpeed: Math.round(c.windSpeed), windGusts: Math.round(c.windGusts), windDir: Math.round(c.windDir),
+      waterTemp: r1(c.waterTemp), tidePhase: tp.phase, tideLevel: r1(tp.normalized), tidalCoeff: Math.round(coeff),
+      fitness: currentFitness,
+      score: res.excluded ? null : Math.round(res.score), excluded: !!res.excluded, exclusionReason: res.reason || null,
+      recoBoards: reco.map(b => b.board.name)
+    };
+  } catch (e) {
+    console.warn('Snapshot prévision impossible:', e.message);
+    return null;
+  }
+}
+
 function saveFeedback(entry) {
   const all = getFeedback();
   all.unshift(entry);
@@ -2201,7 +2269,9 @@ function setupFeedbackModal() {
     // Smart suggestions based on current time
     if (h >= 6 && h < 12) {
       picks.push({ label: 'Ce matin', date: todayAt(7, 0) });
-      picks.push({ label: 'Dawn patrol', date: todayAt(6, 30) });
+      const sr = calcSunTimes(new Date()).sunrise;
+      const srMin = Math.floor(sr * 4) * 15; // arrondi au quart d'heure inférieur
+      picks.push({ label: 'Dawn patrol', date: todayAt(Math.floor(srMin / 60), srMin % 60) });
     }
     if (h >= 10 && h < 18) {
       picks.push({ label: 'Ce midi', date: todayAt(12, 0) });
@@ -2373,6 +2443,7 @@ function setupFeedbackModal() {
       noWater,
       spotName,
       boardName: BOARDS.find(b => b.id === board)?.name || board,
+      forecast: isOther ? null : getForecastSnapshot(spotId, date, noWater ? 60 : selectedDuration),
       timestamp: Date.now()
     };
     saveFeedback(entry);
@@ -2471,7 +2542,8 @@ function exportFeedback() {
     noWater: s.noWater || false,
     ...(s.noWater ? {} : { board: s.boardName, rating: s.rating, duration: s.duration }),
     tags: s.tags,
-    notes: s.notes || ''
+    notes: s.notes || '',
+    forecast: s.forecast || null
   }));
 
   const text = JSON.stringify(exported, null, 2);
@@ -2553,21 +2625,25 @@ function mergePresets() {
   availEnd = maxE;
 }
 
-// Sunrise/sunset calc (simplified solar position for Biarritz ~43.48°N)
-function calcSunTimes(date) {
-  const lat = 43.48 * Math.PI / 180;
-  const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000);
-  // Solar declination
-  const decl = -23.45 * Math.cos(2 * Math.PI / 365 * (dayOfYear + 10)) * Math.PI / 180;
-  // Hour angle at sunrise/sunset
-  const cosH = -Math.tan(lat) * Math.tan(decl);
-  const H = Math.acos(Math.max(-1, Math.min(1, cosH))) * 180 / Math.PI;
-  // Solar noon ~ 13h30 (UTC+1/+2 for France, simplified)
-  const isDST = date.getMonth() >= 2 && date.getMonth() <= 9; // rough DST March-Oct
-  const solarNoon = isDST ? 14.0 : 13.0; // solar noon in local time (France is ~UTC+1, noon ≈ 13h; DST ≈ 14h)
-  const sunrise = solarNoon - H / 15;
-  const sunset = solarNoon + H / 15;
-  return { sunrise: Math.round(sunrise * 10) / 10, sunset: Math.round(sunset * 10) / 10 };
+// Lever/coucher du soleil (algo NOAA simplifié, côte basque), en heures décimales LOCALES
+function calcSunTimes(date, lat = 43.44, lon = -1.57) {
+  const rad = Math.PI / 180;
+  const noonUTC = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12);
+  const dayOfYear = Math.floor((noonUTC - Date.UTC(date.getFullYear(), 0, 0)) / 86400000);
+  const g = 2 * Math.PI / 365 * (dayOfYear - 1);
+  const eqTime = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g)
+    - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g)); // minutes
+  const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g)
+    + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  const cosH = (Math.cos(90.833 * rad) - Math.sin(lat * rad) * Math.sin(decl)) / (Math.cos(lat * rad) * Math.cos(decl));
+  const H = Math.acos(Math.max(-1, Math.min(1, cosH))) / rad; // degrés
+  const solarNoonUTCmin = 720 - 4 * lon - eqTime;
+  // Décalage horaire réel du jour (gère l'heure d'été/hiver)
+  const offsetMin = -new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12).getTimezoneOffset();
+  const toLocal = m => (m + offsetMin) / 60;
+  const sunrise = toLocal(solarNoonUTCmin - 4 * H);
+  const sunset = toLocal(solarNoonUTCmin + 4 * H);
+  return { sunrise: Math.round(sunrise * 100) / 100, sunset: Math.round(sunset * 100) / 100 };
 }
 
 function hourToLabel(h) {

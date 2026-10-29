@@ -1,0 +1,4 @@
+# Exports de feedback (notes perso) : ne jamais committer, le dépôt est public
+feedback*.json
+*export*.json
+exports/
