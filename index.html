@@ -2445,20 +2445,27 @@ function renderPastSessions() {
   if (unprocessed.length > 0) {
     exportSection.style.display = 'block';
     exportHint.textContent = `${unprocessed.length} session${unprocessed.length > 1 ? 's' : ''} non traitée${unprocessed.length > 1 ? 's' : ''} — copie dans le presse-papier pour calibration`;
+    const btnNew = document.getElementById('fbExport');
+    btnNew.style.display = '';
+    btnNew.textContent = '📋 Exporter pour calibration';
   } else {
     exportSection.style.display = 'block';
-    exportHint.textContent = 'Toutes les sessions ont été prises en compte ✓';
-    document.getElementById('fbExport').style.display = 'none';
+    exportHint.textContent = 'Toutes les sessions ont été prises en compte ✓ — tu peux tout réexporter si besoin';
+    const btnAll = document.getElementById('fbExport');
+    btnAll.style.display = '';
+    btnAll.textContent = `📋 Tout réexporter (${sessions.length})`;
   }
 }
 
 function exportFeedback() {
   const sessions = getFeedback();
   const unprocessed = sessions.filter(s => !s.processed);
-  if (unprocessed.length === 0) return;
+  if (sessions.length === 0) return;
+  // Nouvelles sessions s'il y en a, sinon tout l'historique (réexport)
+  const toExport = unprocessed.length > 0 ? unprocessed : sessions;
 
   // Build clean export (remove internal fields)
-  const exported = unprocessed.map(s => ({
+  const exported = toExport.map(s => ({
     date: s.date,
     spot: s.spotName,
     noWater: s.noWater || false,
@@ -2475,10 +2482,9 @@ function exportFeedback() {
     localStorage.setItem(FEEDBACK_KEY, JSON.stringify(all));
 
     const btn = document.getElementById('fbExport');
-    btn.textContent = `✓ ${unprocessed.length} session${unprocessed.length > 1 ? 's' : ''} copiée${unprocessed.length > 1 ? 's' : ''} !`;
+    btn.textContent = `✓ ${toExport.length} session${toExport.length > 1 ? 's' : ''} copiée${toExport.length > 1 ? 's' : ''} !`;
     btn.disabled = true;
     setTimeout(() => {
-      btn.textContent = '📋 Exporter pour calibration';
       btn.disabled = false;
       renderPastSessions();
     }, 2000);
